@@ -9,60 +9,53 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // WanderPlot travel-journal palette
-        teal: {
-          50: '#f0f9ff',
-          100: '#e0f2fe',
-          400: '#38bdf8',
-          500: '#0ea5e9',
-          600: '#0284c7',
-          700: '#0369a1',
-          800: '#075985',
-          900: '#0c4a6e',
-          950: '#082f49',
-        },
+        // Earthy, premium travel palette
         brand: {
-          DEFAULT: '#0D4F5C',
-          light: '#1a6b7a',
-          dark: '#092f38',
+          DEFAULT: '#1B3B36', // Deep forest/ocean green
+          light: '#2C5A53',
+          dark: '#0E1E1C',
         },
-        amber: {
-          DEFAULT: '#F5A623',
-          light: '#f7bb56',
-          dark: '#c47d0e',
+        terracotta: {
+          DEFAULT: '#C86B52', // Earthy clay/sunset
+          light: '#D98A76',
+          dark: '#A0503B',
         },
+        sand: {
+          DEFAULT: '#F4EFEA', // Light sand/canvas
+          dark: '#E6DCCF',
+        },
+        ocean: {
+          DEFAULT: '#3A6073', // Deep ocean blue
+          light: '#5B869C',
+        },
+        sage: '#8BA88E',
         cream: {
-          DEFAULT: '#FAF7F2',
-          dark: '#F0EBE3',
+          DEFAULT: '#FDFBF7',
+          dark: '#F5F0E6',
         },
-        forest: '#1B4332',
-        coral: '#E8735A',
-        sky: '#87CEEB',
       },
       fontFamily: {
         sans: ['var(--font-inter)', 'Inter', 'system-ui', 'sans-serif'],
         display: ['var(--font-playfair)', 'Playfair Display', 'Georgia', 'serif'],
       },
       backgroundImage: {
-        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
-        'hero-gradient': 'linear-gradient(135deg, #0D4F5C 0%, #1a6b7a 40%, #0e7490 100%)',
-        'card-gradient': 'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.7) 100%)',
+        'hero-gradient': 'linear-gradient(135deg, #1B3B36 0%, #3A6073 100%)',
+        'card-gradient': 'linear-gradient(180deg, transparent 0%, rgba(27, 59, 54, 0.9) 100%)',
       },
       animation: {
-        'float': 'float 6s ease-in-out infinite',
+        'float': 'float 8s ease-in-out infinite',
         'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'slide-up': 'slideUp 0.5s ease-out',
-        'fade-in': 'fadeIn 0.6s ease-out',
-        'shimmer': 'shimmer 2s linear infinite',
+        'slide-up': 'slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
+        'fade-in': 'fadeIn 0.8s ease-out',
+        'shimmer': 'shimmer 2.5s linear infinite',
       },
       keyframes: {
         float: {
           '0%, 100%': { transform: 'translateY(0px)' },
-          '50%': { transform: 'translateY(-20px)' },
+          '50%': { transform: 'translateY(-15px)' },
         },
         slideUp: {
-          '0%': { transform: 'translateY(20px)', opacity: '0' },
+          '0%': { transform: 'translateY(30px)', opacity: '0' },
           '100%': { transform: 'translateY(0)', opacity: '1' },
         },
         fadeIn: {
@@ -75,10 +68,9 @@ const config: Config = {
         },
       },
       boxShadow: {
-        'card': '0 4px 24px rgba(0, 0, 0, 0.08)',
-        'card-hover': '0 8px 40px rgba(0, 0, 0, 0.15)',
-        'glow': '0 0 30px rgba(13, 79, 92, 0.3)',
-        'glow-amber': '0 0 30px rgba(245, 166, 35, 0.4)',
+        'soft': '0 10px 40px -10px rgba(0,0,0,0.08)',
+        'float': '0 20px 40px -10px rgba(0,0,0,0.12)',
+        'glow-terracotta': '0 0 40px rgba(200, 107, 82, 0.3)',
       },
       borderRadius: {
         '2xl': '1rem',
@@ -86,7 +78,9 @@ const config: Config = {
         '4xl': '2rem',
       },
       backdropBlur: {
-        xs: '2px',
+        md: '12px',
+        lg: '16px',
+        xl: '24px',
       },
     },
   },

@@ -2,9 +2,10 @@
 import { useState } from 'react';
 import {
   MapPin, Calendar, Users, Gauge, Palette, Star, Ban, Shuffle,
-  ArrowRight, IndianRupee
+  ArrowRight, IndianRupee, Navigation, Hash,
 } from 'lucide-react';
 import type { TripInputsState } from '@/app/plan/page';
+import { defaultPartySize } from '@/lib/recommend';
 
 const SCENERY_OPTIONS = [
   { value: 'mountains', label: 'Mountains', emoji: '🏔️' },
@@ -49,10 +50,13 @@ export function PlannerForm({ onSubmit }: Props) {
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [days, setDays] = useState(4);
   const [groupType, setGroupType] = useState('couple');
+  const [partySize, setPartySize] = useState(defaultPartySize('couple'));
   const [pace, setPace] = useState('moderate');
   const [scenery, setScenery] = useState<string[]>([]);
   const [experience, setExperience] = useState<string[]>([]);
   const [dealbreakers, setDealbreakers] = useState<string[]>([]);
+  const [knownDestination, setKnownDestination] = useState('');
+  const [showKnownDest, setShowKnownDest] = useState(false);
 
   const toggleMulti = (
     arr: string[],
@@ -62,16 +66,37 @@ export function PlannerForm({ onSubmit }: Props) {
     setArr(arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val]);
   };
 
+  const handleGroupTypeChange = (val: string) => {
+    setGroupType(val);
+    // Auto-update partySize to the sensible default for the group
+    setPartySize(defaultPartySize(val));
+  };
+
   const handleSurpriseMe = () => {
     setScenery([]);
     setExperience([]);
     setPace('moderate');
-    onSubmit({ origin: origin || 'Delhi', budget, month, days, groupType, pace: 'moderate', scenery: [], experience: [], dealbreakers });
+    onSubmit({
+      origin: origin || 'Delhi',
+      budget, month, days, groupType,
+      partySize,
+      pace: 'moderate',
+      scenery: [],
+      experience: [],
+      dealbreakers,
+      knownDestination: knownDestination.trim() || undefined,
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({ origin, budget, month, days, groupType, pace, scenery, experience, dealbreakers });
+    onSubmit({
+      origin,
+      budget, month, days, groupType,
+      partySize,
+      pace, scenery, experience, dealbreakers,
+      knownDestination: showKnownDest && knownDestination.trim() ? knownDestination.trim() : undefined,
+    });
   };
 
   return (
@@ -165,18 +190,18 @@ export function PlannerForm({ onSubmit }: Props) {
           </div>
         </div>
 
-        {/* Group type */}
+        {/* Group type + party size */}
         <div>
           <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
             <Users className="w-4 h-4 text-brand" />
             Who&apos;s going?
           </label>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 mb-4">
             {GROUP_TYPES.map((g) => (
               <button
                 key={g.value}
                 type="button"
-                onClick={() => setGroupType(g.value)}
+                onClick={() => handleGroupTypeChange(g.value)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all border-2 ${
                   groupType === g.value
                     ? 'bg-brand text-white border-brand shadow-md'
@@ -187,6 +212,27 @@ export function PlannerForm({ onSubmit }: Props) {
                 {g.label}
               </button>
             ))}
+          </div>
+
+          {/* Party size */}
+          <div className="flex items-center gap-3">
+            <Hash className="w-4 h-4 text-brand flex-none" />
+            <label className="text-sm font-semibold text-gray-700 flex-none">
+              Number of travellers
+            </label>
+            <input
+              id="party-size-input"
+              type="number"
+              min={1}
+              max={20}
+              value={partySize}
+              onChange={(e) => setPartySize(Math.max(1, Number(e.target.value)))}
+              className="w-20 border-2 border-gray-200 rounded-xl px-3 py-2 text-sm font-medium text-center focus:outline-none focus:border-brand"
+            />
+            <span className="text-xs text-gray-400">person(s)</span>
+            <span className="text-xs text-gray-400 ml-1">
+              ≈ ₹{Math.round(budget / Math.max(partySize, 1) / days).toLocaleString('en-IN')}/person/day
+            </span>
           </div>
         </div>
 
@@ -299,6 +345,33 @@ export function PlannerForm({ onSubmit }: Props) {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Known destination — §9.3 */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowKnownDest(!showKnownDest)}
+            className="flex items-center gap-2 text-sm text-brand font-medium hover:underline"
+          >
+            <Navigation className="w-4 h-4" />
+            {showKnownDest ? 'Hide' : 'I already have a destination in mind →'}
+          </button>
+          {showKnownDest && (
+            <div className="mt-3">
+              <input
+                id="known-destination-input"
+                type="text"
+                value={knownDestination}
+                onChange={(e) => setKnownDestination(e.target.value)}
+                placeholder="e.g. Rishikesh, Hampi, Coorg..."
+                className="input-field"
+              />
+              <p className="text-xs text-gray-400 mt-1.5">
+                We&apos;ll validate it and build your itinerary directly.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Actions */}

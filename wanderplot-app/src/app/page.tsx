@@ -1,282 +1,245 @@
+'use client';
 import Link from 'next/link';
-import { MapPin, Sparkles, Map, Star, Users, Zap, Shield, Share2 } from 'lucide-react';
-import type { Metadata } from 'next';
-
-export const metadata: Metadata = {
-  title: 'WanderPlot — AI Trip Planner for India',
-  description: 'Plan your perfect Indian trip with AI. Personalized destination recommendations and detailed itineraries based on your budget and interests.',
-};
+import { MapPin, Sparkles, Map, Star, Users, Zap, Shield, Share2, Compass, ArrowRight } from 'lucide-react';
+import { motion, useScroll, useTransform } from 'framer-motion';
+import { useRef } from 'react';
 
 const features = [
   {
     icon: Sparkles,
     title: 'AI Itinerary Writer',
-    desc: 'Get a hand-crafted day-by-day plan powered by Gemini or GPT-4o, grounded in real places.',
-    color: 'from-purple-500 to-pink-500',
+    desc: 'Get a hand-crafted day-by-day plan powered by Gemini, grounded in real places.',
+    color: 'text-terracotta',
+    bg: 'bg-terracotta/10',
   },
   {
     icon: Map,
     title: 'Smart Recommendations',
     desc: 'Our scoring engine matches season, budget, scenery, and experience — and tells you why.',
-    color: 'from-teal-500 to-cyan-400',
+    color: 'text-ocean',
+    bg: 'bg-ocean/10',
   },
   {
     icon: Zap,
     title: 'Instant Refinement',
-    desc: '"Make it cheaper", "add a rest day" — refine any itinerary with a single message.',
-    color: 'from-amber-400 to-orange-500',
+    desc: '"Make it cheaper", "add a rest day" — refine any itinerary with voice or text.',
+    color: 'text-brand',
+    bg: 'bg-brand/10',
   },
   {
     icon: Shield,
     title: 'No Hallucinations',
     desc: 'Every suggestion is grounded in our curated destination database — no invented restaurants.',
-    color: 'from-green-500 to-emerald-400',
+    color: 'text-sage',
+    bg: 'bg-sage/20',
   },
   {
     icon: Share2,
     title: 'Shareable Links',
     desc: 'Share your trip plan with a single link — no account needed to view.',
-    color: 'from-blue-500 to-indigo-500',
+    color: 'text-terracotta',
+    bg: 'bg-terracotta/10',
   },
   {
     icon: Users,
     title: 'Group-Aware',
     desc: 'Solo, couple, family with kids, or friends group — plans adapt to your travel style.',
-    color: 'from-rose-500 to-red-400',
+    color: 'text-ocean',
+    bg: 'bg-ocean/10',
   },
 ];
 
 const destinations = [
-  { name: 'Ladakh', tag: 'Adventure', emoji: '🏔️', desc: 'High passes & azure lakes' },
-  { name: 'Goa', tag: 'Beaches', emoji: '🏖️', desc: 'Sun, sand & Portuguese heritage' },
-  { name: 'Varanasi', tag: 'Spiritual', emoji: '🪔', desc: 'Ghats, aarti & ancient rituals' },
-  { name: 'Coorg', tag: 'Relaxation', emoji: '☕', desc: 'Coffee estates & misty forests' },
-  { name: 'Jaisalmer', tag: 'Desert', emoji: '🐪', desc: 'Golden fort & dune camping' },
-  { name: 'Alleppey', tag: 'Backwaters', emoji: '🛶', desc: 'Houseboat bliss in Kerala' },
+  { name: 'Ladakh', tag: 'Adventure', image: 'https://images.unsplash.com/photo-1626621341517-bbf3e9990b2c?auto=format&fit=crop&q=80&w=800', desc: 'High passes & azure lakes' },
+  { name: 'Kerala', tag: 'Backwaters', image: 'https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?auto=format&fit=crop&q=80&w=800', desc: 'Houseboat bliss & lush greens' },
+  { name: 'Varanasi', tag: 'Spiritual', image: 'https://images.unsplash.com/photo-1561361513-2d000a50f0dc?auto=format&fit=crop&q=80&w=800', desc: 'Ghats, aarti & ancient rituals' },
+  { name: 'Andaman', tag: 'Beaches', image: 'https://images.unsplash.com/photo-1588668214407-6ea9a6d8c272?auto=format&fit=crop&q=80&w=800', desc: 'White sands & coral reefs' },
 ];
 
 export default function HomePage() {
-  return (
-    <div className="page-enter">
-      {/* ─── Hero ──────────────────────────────────────────── */}
-      <section className="relative min-h-screen bg-hero-gradient overflow-hidden flex items-center">
-        {/* Background decoration */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-96 h-96 bg-white/5 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 -left-20 w-80 h-80 bg-amber/10 rounded-full blur-3xl" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-white/3 rounded-full blur-3xl" />
-          {/* Floating dots */}
-          {[...Array(12)].map((_, i) => (
-            <div
-              key={i}
-              className="absolute w-2 h-2 bg-white/20 rounded-full animate-float"
-              style={{
-                left: `${10 + i * 8}%`,
-                top: `${15 + (i % 4) * 20}%`,
-                animationDelay: `${i * 0.5}s`,
-                animationDuration: `${4 + (i % 3)}s`,
-              }}
-            />
-          ))}
-        </div>
+  const targetRef = useRef(null);
+  const { scrollYProgress } = useScroll({
+    target: targetRef,
+    offset: ["start start", "end start"]
+  });
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-24 pb-16">
-          <div className="max-w-3xl mx-auto text-center">
-            {/* Badge */}
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/20 text-white/90 text-sm font-medium mb-8">
-              <Star className="w-4 h-4 text-amber fill-amber" />
-              AI-powered trip planning for India
+  const y = useTransform(scrollYProgress, [0, 1], ["0%", "50%"]);
+  const opacity = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
+
+  return (
+    <div className="bg-[#09090b] min-h-screen selection:bg-brand/30">
+      {/* ─── Hero Section with Parallax Starry Mountain ─── */}
+      <section ref={targetRef} className="relative min-h-[95vh] flex items-center justify-center overflow-hidden pt-20">
+        <motion.div 
+          style={{ y, opacity }}
+          className="absolute inset-0 z-0"
+        >
+          {/* Stunning Starry Mountain Background */}
+          <div 
+            className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-60"
+            style={{ backgroundImage: 'url("https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&q=80&w=2000")' }}
+          />
+          {/* Dark gradient overlay to ensure text pops perfectly */}
+          <div className="absolute inset-0 bg-gradient-to-b from-[#09090b]/40 via-[#09090b]/60 to-[#09090b]" />
+        </motion.div>
+
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 w-full text-center mt-12">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 1, ease: "easeOut" }}
+            className="max-w-4xl mx-auto"
+          >
+            <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full glass-panel text-white/90 text-sm font-medium mb-8 border border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.05)]">
+              <Compass className="w-4 h-4 text-brand" />
+              Next-generation travel planning
             </div>
 
-            {/* Headline */}
-            <h1 className="font-display text-5xl sm:text-6xl md:text-7xl font-bold text-white leading-tight mb-6">
-              Your perfect trip,{' '}
-              <span className="italic text-amber">plotted</span> in minutes
+            <h1 className="font-display text-5xl sm:text-6xl md:text-8xl font-medium text-white leading-[1.1] mb-6 tracking-tight drop-shadow-2xl">
+              Plot your escape.<br />
+              <span className="italic text-brand font-serif">Effortlessly.</span>
             </h1>
 
-            <p className="text-lg sm:text-xl text-white/75 leading-relaxed mb-10 max-w-2xl mx-auto">
-              Tell us your budget, travel month, and what you love — our AI recommends 
-              the best Indian destinations and writes a day-by-day itinerary just for you.
+            <p className="text-lg sm:text-xl text-zinc-300 leading-relaxed mb-10 max-w-2xl mx-auto font-light drop-shadow-md">
+              Tell us your vibe, budget, and travel month. Our AI builds a grounded, stunningly detailed Indian itinerary in seconds.
             </p>
 
-            {/* CTAs */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/plan" id="hero-start-planning" className="btn-amber text-base px-8 py-4 shadow-glow-amber">
-                <Sparkles className="w-5 h-5" />
-                Start Planning Free
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+              <Link href="/plan" className="btn-primary text-lg px-8 py-4 w-full sm:w-auto font-semibold group">
+                <Sparkles className="w-5 h-5 transition-transform group-hover:rotate-12" />
+                Start Your Journey
               </Link>
-              <Link href="/trips/demo" className="btn-secondary border-white text-white hover:bg-white hover:text-brand text-base px-8 py-4">
-                See a Sample Trip
+              <Link href="/trips/demo" className="btn-terracotta text-lg px-8 py-4 w-full sm:w-auto font-semibold">
+                View sample trip <ArrowRight className="w-4 h-4 inline" />
               </Link>
             </div>
-
-            {/* Social proof */}
-            <div className="mt-14 flex flex-col sm:flex-row items-center justify-center gap-8 text-white/60 text-sm">
-              <div className="flex items-center gap-2">
-                <div className="flex -space-x-2">
-                  {['🧑', '👩', '🧔', '👱'].map((e, i) => (
-                    <div key={i} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-sm border-2 border-white/10">
-                      {e}
-                    </div>
-                  ))}
-                </div>
-                <span>10,000+ trips planned</span>
-              </div>
-              <div className="flex items-center gap-1">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} className="w-4 h-4 text-amber fill-amber" />
-                ))}
-                <span className="ml-1">4.9 / 5 from travellers</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-amber" />
-                <span>30+ curated destinations</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Wave */}
-        <div className="absolute bottom-0 left-0 right-0">
-          <svg viewBox="0 0 1440 80" className="w-full text-cream fill-current" preserveAspectRatio="none">
-            <path d="M0,40 C360,80 1080,0 1440,40 L1440,80 L0,80 Z" />
-          </svg>
+          </motion.div>
         </div>
       </section>
 
-      {/* ─── Destinations preview ──────────────────────── */}
-      <section className="py-20 bg-cream">
+      {/* ─── Destinations Grid ──────────────────────── */}
+      <section className="py-24 relative z-20 bg-[#09090b]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-12">
-            <p className="text-amber font-semibold tracking-wide uppercase text-sm mb-3">Where will you go?</p>
-            <h2 className="section-title">Discover India&apos;s finest</h2>
-            <p className="text-gray-500 mt-3 max-w-xl mx-auto">
-              From snow-capped Himalayan passes to tropical beaches — 30 handpicked destinations with honest, AI-grounded recommendations.
-            </p>
-          </div>
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-100px" }}
+            className="flex flex-col md:flex-row justify-between items-end mb-16 gap-6"
+          >
+            <div className="max-w-2xl">
+              <p className="text-brand font-semibold tracking-wider uppercase text-sm mb-4 flex items-center gap-2">
+                <Star className="w-4 h-4" /> Curated Locales
+              </p>
+              <h2 className="section-title">Discover the extraordinary</h2>
+            </div>
+            <Link href="/plan" className="flex items-center gap-2 text-ocean hover:text-white transition-colors font-medium group">
+              Explore all destinations <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </Link>
+          </motion.div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {destinations.map((dest, i) => (
-              <Link
+              <motion.div
                 key={dest.name}
-                href="/plan"
-                className="card group cursor-pointer relative overflow-hidden aspect-[4/3]"
-                style={{ animationDelay: `${i * 0.1}s` }}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-50px" }}
+                transition={{ duration: 0.6, delay: i * 0.1 }}
+                className="group relative h-[400px] rounded-3xl overflow-hidden cursor-pointer border border-white/10"
               >
-                {/* Gradient bg representing scenery */}
-                <div
-                  className="absolute inset-0 transition-transform duration-500 group-hover:scale-110"
-                  style={{
-                    background: [
-                      'linear-gradient(135deg, #1a3a5c, #2d6a8e)',
-                      'linear-gradient(135deg, #1a5c3a, #2d8e6a)',
-                      'linear-gradient(135deg, #5c3a1a, #8e6a2d)',
-                      'linear-gradient(135deg, #2e1a5c, #6a2d8e)',
-                      'linear-gradient(135deg, #5c1a2e, #8e2d6a)',
-                      'linear-gradient(135deg, #1a5c5c, #2d8e8e)',
-                    ][i],
-                  }}
+                <img 
+                  src={dest.image} 
+                  alt={dest.name} 
+                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
-                <div className="absolute inset-0 bg-card-gradient" />
-                <div className="absolute top-4 right-4 text-3xl">{dest.emoji}</div>
-                <div className="absolute bottom-0 left-0 p-5 text-white">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-amber/90 bg-amber/20 px-2 py-0.5 rounded-full">
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+                
+                <div className="absolute bottom-0 left-0 right-0 p-6">
+                  <span className="inline-block px-3 py-1 bg-black/40 backdrop-blur-md rounded-full text-xs font-medium text-brand mb-3 border border-white/10">
                     {dest.tag}
                   </span>
-                  <h3 className="font-display font-bold text-xl mt-2">{dest.name}</h3>
-                  <p className="text-white/70 text-sm">{dest.desc}</p>
+                  <h3 className="font-display font-medium text-2xl text-white mb-1">{dest.name}</h3>
+                  <p className="text-zinc-400 text-sm font-light">{dest.desc}</p>
                 </div>
-              </Link>
+              </motion.div>
             ))}
-          </div>
-
-          <div className="text-center mt-10">
-            <Link href="/plan" className="btn-primary">
-              <MapPin className="w-4 h-4" />
-              Explore All Destinations
-            </Link>
           </div>
         </div>
       </section>
 
-      {/* ─── Features ──────────────────────────────────── */}
-      <section className="py-20 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-14">
-            <p className="text-amber font-semibold tracking-wide uppercase text-sm mb-3">Why WanderPlot</p>
-            <h2 className="section-title">Planning that actually makes sense</h2>
-          </div>
+      {/* ─── Features Layout ──────────────────────────────────── */}
+      <section className="py-24 bg-[#09090b] relative">
+        {/* Subtle background glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-brand/5 rounded-full blur-[120px] pointer-events-none" />
+        
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 relative z-10">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-20"
+          >
+            <p className="text-brand font-semibold tracking-wider uppercase text-sm mb-4">Intelligent Engine</p>
+            <h2 className="section-title">Crafted with precision</h2>
+          </motion.div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map((f) => (
-              <div
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {features.map((f, i) => (
+              <motion.div
                 key={f.title}
-                className="group p-6 rounded-3xl border border-gray-100 hover:border-brand/20 bg-white hover:bg-cream/50 transition-all duration-300 hover:shadow-card"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: i * 0.1 }}
+                className="card p-8 group hover:-translate-y-1"
               >
-                <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${f.color} flex items-center justify-center mb-4 shadow-md group-hover:scale-110 transition-transform`}>
-                  <f.icon className="w-6 h-6 text-white" />
+                <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                  <f.icon className="w-6 h-6 text-brand" />
                 </div>
-                <h3 className="font-semibold text-lg text-gray-900 mb-2">{f.title}</h3>
-                <p className="text-gray-500 text-sm leading-relaxed">{f.desc}</p>
-              </div>
+                <h3 className="font-semibold text-xl text-white mb-3">{f.title}</h3>
+                <p className="text-zinc-400 leading-relaxed font-light">{f.desc}</p>
+              </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ─── How it works ──────────────────────────────── */}
-      <section className="py-20 bg-cream">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6">
-          <div className="text-center mb-14">
-            <h2 className="section-title">Plan a trip in 3 steps</h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[
-              { step: '01', title: 'Tell us your trip', desc: 'Origin, budget, travel month, group type, and what you love. Or just type it in plain English.' },
-              { step: '02', title: 'Pick a destination', desc: 'Get ranked recommendations with match scores and honest "why" explanations for each place.' },
-              { step: '03', title: 'Get your itinerary', desc: 'AI writes a detailed day-by-day plan. Refine it with one message, export PDF, or share the link.' },
-            ].map((item) => (
-              <div key={item.step} className="text-center">
-                <div className="w-16 h-16 rounded-full bg-brand/10 border-2 border-brand/20 flex items-center justify-center mx-auto mb-4">
-                  <span className="font-display font-bold text-brand text-lg">{item.step}</span>
-                </div>
-                <h3 className="font-semibold text-xl text-gray-900 mb-3">{item.title}</h3>
-                <p className="text-gray-500 leading-relaxed">{item.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ─── CTA Banner ────────────────────────────────── */}
-      <section className="py-20 bg-brand">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center">
-          <h2 className="font-display text-4xl md:text-5xl font-bold text-white mb-6">
-            Your next adventure is{' '}
-            <span className="italic text-amber">one click away</span>
+      {/* ─── Call to Action ────────────────────────────────── */}
+      <section className="relative py-32 overflow-hidden border-t border-white/5">
+        <div className="absolute inset-0 bg-[#09090b]" />
+        {/* Glowing orb behind text */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-brand/10 rounded-[100%] blur-[100px] pointer-events-none" />
+        
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          whileInView={{ opacity: 1, scale: 1 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.8 }}
+          className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 text-center"
+        >
+          <h2 className="font-display text-5xl md:text-7xl font-medium text-white mb-8">
+            Ready to wander?
           </h2>
-          <p className="text-white/70 text-lg mb-8 max-w-xl mx-auto">
-            No account needed to start. Just tell us where you&apos;re coming from and we&apos;ll handle the rest.
+          <p className="text-zinc-300 text-xl mb-12 max-w-2xl mx-auto font-light">
+            Skip the spreadsheets. Let AI design an unforgettable, realistic journey tailored perfectly to you.
           </p>
-          <Link href="/plan" className="btn-amber text-lg px-10 py-4 shadow-glow-amber">
-            <Sparkles className="w-5 h-5" />
-            Plan My Trip Now
+          <Link href="/plan" className="btn-primary text-lg px-12 py-5 font-semibold">
+            Begin Your Story
           </Link>
-        </div>
+        </motion.div>
       </section>
 
       {/* ─── Footer ────────────────────────────────────── */}
-      <footer className="bg-brand-dark py-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-4 text-white/40 text-sm">
+      <footer className="bg-[#09090b] py-12 border-t border-white/10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-6 text-zinc-500 text-sm">
           <div className="flex items-center gap-2">
-            <MapPin className="w-4 h-4 text-amber" />
-            <span className="font-display font-semibold text-white/70">WanderPlot</span>
-            <span>— AI Trip Planner for India</span>
+            <Compass className="w-5 h-5 text-brand" />
+            <span className="font-display text-lg text-white">WanderPlot</span>
           </div>
-          <p>Estimates are planning figures, not guaranteed prices. Always verify before booking.</p>
+          <p className="font-light">AI-crafted journeys for the modern explorer.</p>
         </div>
       </footer>
     </div>
   );
 }
+

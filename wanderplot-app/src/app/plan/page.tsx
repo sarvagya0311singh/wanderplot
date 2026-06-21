@@ -18,10 +18,23 @@ export interface TripInputsState {
   scenery: string[];
   experience: string[];
   dealbreakers: string[];
+  partySize: number;          // §9.4 — number of travellers
+  knownDestination?: string;  // §9.3 — "I know where I want to go"
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type ScoredDestination = any;
+
+// Loading messages — short for fast path, longer for AI generation
+const LOADING_MESSAGES = {
+  recommendations: [
+    'Scoring destinations…',
+    'Finding fresh destinations for you…',
+    'Asking AI for hidden gems…',
+  ],
+  itinerary: 'Writing your itinerary with AI…',
+  refine: 'Updating your plan…',
+};
 
 export default function PlanPage() {
   const [step, setStep] = useState<PlanStep>('intake');
@@ -34,11 +47,30 @@ export default function PlanPage() {
   const [loadingMsg, setLoadingMsg] = useState('');
   const [savedTripId, setSavedTripId] = useState<string | null>(null);
   const [llmError, setLlmError] = useState(false);
+  const [relaxedMsg, setRelaxedMsg] = useState<string | undefined>();
+  const [sourceFlag, setSourceFlag] = useState<string>('local');
+
+  // Cycle loading messages for long-running AI generation
+  let msgTimer: ReturnType<typeof setTimeout> | null = null;
+  const startCyclingMessages = (msgs: string[]) => {
+    let i = 0;
+    setLoadingMsg(msgs[0]);
+    if (msgs.length < 2) return;
+    msgTimer = setInterval(() => {
+      i = (i + 1) % msgs.length;
+      setLoadingMsg(msgs[i]);
+    }, 3500);
+  };
+  const stopCyclingMessages = () => {
+    if (msgTimer) clearInterval(msgTimer);
+    setLoadingMsg('');
+  };
 
   const handleFormSubmit = async (data: TripInputsState) => {
     setInputs(data);
     setLoading(true);
-    setLoadingMsg('Scoring destinations…');
+    setRelaxedMsg(undefined);
+    startCyclingMessages(LOADING_MESSAGES.recommendations);
     try {
       const res = await fetch('/api/recommend', {
         method: 'POST',
@@ -50,14 +82,16 @@ export default function PlanPage() {
         throw new Error(json.error || json.detail || 'Recommendation failed');
       }
       setRecommendations(json.results);
+      setSourceFlag(json.source ?? 'local');
+      if (json.relaxedMessage) setRelaxedMsg(json.relaxedMessage);
       setStep('recommendations');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       toast.error(`Recommendation failed: ${msg}`, { duration: 6000 });
       console.error('Recommend error:', err);
     } finally {
+      stopCyclingMessages();
       setLoading(false);
-      setLoadingMsg('');
     }
   };
 
@@ -65,7 +99,7 @@ export default function PlanPage() {
     setSelectedDest(dest);
     setLlmError(false);
     setLoading(true);
-    setLoadingMsg('Writing your itinerary with AI…');
+    setLoadingMsg(LOADING_MESSAGES.itinerary);
     try {
       const res = await fetch('/api/itinerary/generate', {
         method: 'POST',
@@ -99,7 +133,7 @@ export default function PlanPage() {
   const handleRefine = async (instruction: string) => {
     if (!itinerary || !selectedDest) return;
     setLoading(true);
-    setLoadingMsg('Updating your plan…');
+    setLoadingMsg(LOADING_MESSAGES.refine);
     try {
       const res = await fetch('/api/itinerary/refine', {
         method: 'POST',
@@ -167,6 +201,13 @@ export default function PlanPage() {
     { id: 'itinerary', label: 'Your Itinerary', icon: Sparkles },
   ];
 
+  const sourceLabel: Record<string, string> = {
+    local: 'Curated catalog',
+    db: 'Catalog + AI cache',
+    'ai+db': '✨ AI-curated',
+    'ai-ephemeral': '✨ AI-generated',
+  };
+
   return (
     <div className="min-h-screen bg-cream page-enter">
       {/* Header */}
@@ -230,7 +271,20 @@ export default function PlanPage() {
           <div className="animate-fade-in">
             <div className="text-center mb-8">
               <h2 className="section-title">Your Top Matches</h2>
-              <p className="text-gray-500 mt-2">Ranked by season, budget, scenery, and experience fit</p>
+              <div className="flex items-center justify-center gap-2 mt-2">
+                <p className="text-gray-500">Ranked by season, budget, scenery, and experience fit</p>
+                {sourceFlag && (
+                  <span className="text-xs px-2.5 py-1 rounded-full bg-brand/10 text-brand font-medium">
+                    {sourceLabel[sourceFlag] ?? sourceFlag}
+                  </span>
+                )}
+              </div>
+              {relaxedMsg && (
+                <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber/10 text-amber text-sm font-medium">
+                  <Info className="w-4 h-4 flex-none" />
+                  {relaxedMsg}
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {recommendations.map((rec) => (
@@ -252,53 +306,45 @@ export default function PlanPage() {
           </div>
         )}
 
-        {/* LLM not configured — friendly setup prompt */}
+        {/* LLM not configured / Quota Exceeded — friendly setup prompt */}
         {step === 'itinerary' && selectedDest && llmError && (
           <div className="animate-fade-in max-w-lg mx-auto">
             <div className="card p-8 text-center">
-              <div className="w-16 h-16 rounded-full bg-amber/10 flex items-center justify-center mx-auto mb-4">
-                <AlertTriangle className="w-8 h-8 text-amber" />
+              <div className="w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto mb-4 border border-amber-500/20">
+                <AlertTriangle className="w-8 h-8 text-amber-500" />
               </div>
-              <h2 className="font-display font-bold text-2xl text-gray-900 mb-2">
-                LLM API Key Missing
+              <h2 className="font-display font-bold text-2xl text-white mb-2">
+                API Key Invalid or Quota Exceeded
               </h2>
-              <p className="text-gray-500 mb-6 leading-relaxed">
-                You selected <strong>{selectedDest.destination.name}</strong> — now we need an AI model to write
-                the itinerary. Add a key to <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm">.env.local</code> to continue.
+              <p className="text-zinc-400 mb-6 leading-relaxed">
+                You selected <strong>{selectedDest.destination.name}</strong>, but the itinerary generation failed. 
+                Your current Gemini API key either has a 0 limit or is exhausted.
               </p>
-
-              <div className="text-left bg-gray-50 rounded-2xl p-5 mb-6 space-y-3 text-sm">
-                <div className="flex items-start gap-2">
-                  <Info className="w-4 h-4 text-brand mt-0.5 flex-none" />
+              <div className="text-left bg-black/40 border border-white/10 rounded-2xl p-5 mb-6 space-y-3 text-sm">
+                <div className="flex items-start gap-3">
+                  <Info className="w-5 h-5 text-brand mt-0.5 flex-none" />
                   <div>
-                    <p className="font-semibold text-gray-800">Using Gemini (recommended — free tier)</p>
-                    <p className="text-gray-500 mt-0.5">Get key at <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-brand underline">aistudio.google.com</a></p>
-                    <code className="block bg-white border border-gray-200 rounded p-2 mt-1.5 text-xs text-gray-700 break-all">
-                      ACTIVE_LLM=gemini<br />
-                      GEMINI_API_KEY=your_key_here<br />
-                      GEMINI_MODEL=gemini-1.5-pro
-                    </code>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <Info className="w-4 h-4 text-brand mt-0.5 flex-none" />
-                  <div>
-                    <p className="font-semibold text-gray-800">Using OpenAI GPT-4o</p>
-                    <p className="text-gray-500 mt-0.5">Get key at <a href="https://platform.openai.com/api-keys" target="_blank" className="text-brand underline">platform.openai.com</a></p>
-                    <code className="block bg-white border border-gray-200 rounded p-2 mt-1.5 text-xs text-gray-700 break-all">
-                      ACTIVE_LLM=openai<br />
-                      OPENAI_API_KEY=your_key_here
-                    </code>
+                    <p className="font-semibold text-white">How to fix this (Important!)</p>
+                    <p className="text-zinc-400 mt-1">
+                      Your key starts with <code>AQ...</code> which means it belongs to an internal project with a 0 limit. You need a standard key starting with <code>AIzaSy...</code>
+                    </p>
+                    <ol className="list-decimal ml-4 mt-3 text-zinc-400 space-y-1">
+                      <li>Go to <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-brand hover:underline">aistudio.google.com</a></li>
+                      <li>Click <strong>Create API key</strong></li>
+                      <li>Select <strong>Create API key in new project</strong> (Do NOT use the existing gen-lang-client project)</li>
+                      <li>Paste the new <code>AIzaSy...</code> key into <code>.env.local</code></li>
+                    </ol>
                   </div>
                 </div>
               </div>
-
-              <p className="text-xs text-gray-400 mb-4">After adding the key, restart the dev server and try again.</p>
               <button
-                onClick={() => setStep('recommendations')}
-                className="btn-secondary"
+                onClick={() => {
+                  setStep('recommendations');
+                  setLlmError(false);
+                }}
+                className="btn-terracotta w-full"
               >
-                ← Pick another destination
+                ← Back to Destinations
               </button>
             </div>
           </div>

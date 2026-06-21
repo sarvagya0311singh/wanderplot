@@ -1,0 +1,17 @@
+{
+  "preset": "ts-jest",
+  "testEnvironment": "node",
+  "moduleNameMapper": {
+    "^@/(.*)$": "<rootDir>/src/$1"
+  },
+  "transform": {
+    "^.+\\.tsx?$": ["ts-jest", {
+      "tsconfig": {
+        "moduleResolution": "bundler",
+        "allowImportingTsExtensions": false
+      }
+    }]
+  },
+  "testMatch": ["**/__tests__/**/*.test.ts"],
+  "setupFiles": []
+}
