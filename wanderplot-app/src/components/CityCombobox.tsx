@@ -12,7 +12,7 @@ interface CityComboboxProps {
 }
 
 export default function CityCombobox({ items, value, onChange, placeholder = 'Search city...', icon }: CityComboboxProps) {
-  const [inputItems, setInputItems] = useState<IndianCity[]>(items.slice(0, 50));
+  const [inputItems, setInputItems] = useState<IndianCity[]>(items.slice(0, 8));
 
   const {
     isOpen,
@@ -28,7 +28,7 @@ export default function CityCombobox({ items, value, onChange, placeholder = 'Se
     onInputValueChange: ({ inputValue }) => {
       onChange(inputValue || '');
       if (!inputValue) {
-        setInputItems(items.slice(0, 50));
+        setInputItems(items.slice(0, 8));
         return;
       }
       
@@ -50,13 +50,13 @@ export default function CityCombobox({ items, value, onChange, placeholder = 'Se
     <div className="relative w-full">
       <label {...getLabelProps()} className="sr-only">Choose a city</label>
       <div className="relative flex items-center">
-        <div className="absolute left-4 text-gray-400">
+        <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400">
           {icon || <MapPin className="w-5 h-5" />}
         </div>
         <input
           {...getInputProps()}
           placeholder={placeholder}
-          className="input-field pl-12 pr-10 w-full"
+          className="input-field !pl-12 !pr-11 w-full"
         />
         <button
           type="button"
@@ -70,10 +70,18 @@ export default function CityCombobox({ items, value, onChange, placeholder = 'Se
 
       <ul
         {...getMenuProps()}
-        className={`absolute z-50 w-full mt-2 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden ${
-          !(isOpen && inputItems.length > 0) && 'hidden'
-        }`}
+        className={`absolute z-50 w-full mt-2 bg-white rounded-xl shadow-xl border border-gray-100
+                    max-h-80 overflow-y-auto overscroll-contain
+                    [scrollbar-width:thin] [scrollbar-color:theme(colors.gray.300)_transparent]
+                    [&::-webkit-scrollbar]:w-1.5
+                    [&::-webkit-scrollbar-thumb]:rounded-full
+                    [&::-webkit-scrollbar-thumb]:bg-gray-300
+                    [&::-webkit-scrollbar-track]:bg-transparent
+                    ${!(isOpen && (inputItems.length > 0 || value)) && 'hidden'}`}
       >
+        {isOpen && inputItems.length === 0 && (
+          <li className="px-4 py-3 text-sm text-gray-400">No cities found</li>
+        )}
         {isOpen &&
           inputItems.map((item, index) => (
             <li

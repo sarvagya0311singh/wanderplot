@@ -119,7 +119,7 @@ export default function HomePage() {
       </section>
 
       {/* ─── Destinations Grid ──────────────────────── */}
-      <section className="py-24 relative z-20 bg-[#09090b]">
+      <section id="destinations" className="py-24 relative z-20 bg-[#09090b]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
@@ -172,7 +172,7 @@ export default function HomePage() {
       </section>
 
       {/* ─── Features Layout ──────────────────────────────────── */}
-      <section className="py-24 bg-[#09090b] relative">
+      <section id="how-it-works" className="py-24 bg-[#09090b] relative">
         {/* Subtle background glow */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-brand/5 rounded-full blur-[120px] pointer-events-none" />
         

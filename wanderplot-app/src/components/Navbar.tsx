@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
 import { useState, useEffect } from 'react';
-import { MapPin, Menu, X, User, LogOut, Heart, LayoutDashboard } from 'lucide-react';
+import { MapPin, Menu, X, User, LogOut, Heart, LayoutDashboard, ArrowRight } from 'lucide-react';
 import Image from 'next/image';
 
 export function Navbar() {
@@ -37,17 +37,27 @@ export function Navbar() {
         </Link>
 
         {/* Desktop links */}
-        <div className="hidden md:flex items-center gap-8">
-          <Link
-            href="/plan"
-            className={`font-medium transition-colors hover:text-amber ${scrolled ? 'text-gray-700' : 'text-white/90'}`}
-          >
-            Plan a Trip
-          </Link>
+        <div className="hidden md:flex items-center gap-1">
+          {[
+            { href: '/#destinations', label: 'Destinations' },
+            { href: '/#how-it-works', label: 'How it works' },
+          ].map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              className={`px-3 py-2 rounded-full text-sm font-medium transition-colors
+                ${scrolled ? 'text-gray-700 hover:bg-gray-100 hover:text-brand'
+                           : 'text-white/90 hover:bg-white/10 hover:text-white'}`}
+            >
+              {l.label}
+            </Link>
+          ))}
           {session && (
             <Link
               href="/dashboard"
-              className={`font-medium transition-colors hover:text-amber ${scrolled ? 'text-gray-700' : 'text-white/90'}`}
+              className={`px-3 py-2 rounded-full text-sm font-medium transition-colors
+                ${scrolled ? 'text-gray-700 hover:bg-gray-100 hover:text-brand'
+                           : 'text-white/90 hover:bg-white/10 hover:text-white'}`}
             >
               My Trips
             </Link>
@@ -109,11 +119,12 @@ export function Navbar() {
             </div>
           ) : (
             <>
-              <Link href="/auth/signin" className="text-sm font-medium text-brand hover:text-amber transition-colors">
+              <Link href="/auth/signin" className={`text-sm font-medium transition-colors
+                ${scrolled ? 'text-gray-600 hover:text-brand' : 'text-white/80 hover:text-white'}`}>
                 Sign In
               </Link>
               <Link href="/plan" className="btn-primary text-sm px-5 py-2.5">
-                Start Planning
+                Start Planning <ArrowRight className="w-4 h-4 ml-1" />
               </Link>
             </>
           )}
@@ -132,14 +143,20 @@ export function Navbar() {
       {menuOpen && (
         <div className="md:hidden bg-white border-t border-gray-100 shadow-lg animate-slide-up">
           <div className="px-4 py-4 flex flex-col gap-3">
-            <Link href="/plan" className="font-medium text-gray-700 py-2" onClick={() => setMenuOpen(false)}>
-              Plan a Trip
+            <Link href="/#destinations" className="font-medium text-gray-700 py-2" onClick={() => setMenuOpen(false)}>
+              Destinations
+            </Link>
+            <Link href="/#how-it-works" className="font-medium text-gray-700 py-2" onClick={() => setMenuOpen(false)}>
+              How it works
             </Link>
             {session && (
               <Link href="/dashboard" className="font-medium text-gray-700 py-2" onClick={() => setMenuOpen(false)}>
                 My Trips
               </Link>
             )}
+            <Link href="/plan" className="btn-primary text-sm text-center py-3" onClick={() => setMenuOpen(false)}>
+              Start Planning <ArrowRight className="w-4 h-4 inline ml-1" />
+            </Link>
             {session ? (
               <button
                 onClick={() => signOut()}
@@ -148,7 +165,7 @@ export function Navbar() {
                 Sign Out
               </button>
             ) : (
-              <Link href="/auth/signin" className="btn-primary text-sm text-center" onClick={() => setMenuOpen(false)}>
+              <Link href="/auth/signin" className="text-gray-600 font-medium py-2" onClick={() => setMenuOpen(false)}>
                 Sign In
               </Link>
             )}

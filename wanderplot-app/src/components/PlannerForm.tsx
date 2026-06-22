@@ -129,7 +129,7 @@ export function PlannerForm({ onSubmit }: Props) {
         <div>
           <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
             <Navigation className="w-4 h-4 text-brand" />
-            Where do you want to go?
+            Where do you want to travel?
           </label>
           <div className="grid grid-cols-2 gap-3 mb-4">
             <button
@@ -159,24 +159,22 @@ export function PlannerForm({ onSubmit }: Props) {
           </div>
 
           {destinationMode === 'known' && (
-            <div className="mt-2 animate-in slide-in-from-top-2 opacity-0 fade-in duration-300">
-              <input
-                id="known-destination-input"
-                type="text"
+            <div className="mt-2 animate-in slide-in-from-top-2 fade-in duration-300">
+              <CityCombobox
+                items={indianCities}
                 value={knownDestination}
-                onChange={(e) => setKnownDestination(e.target.value)}
-                placeholder="e.g. Rishikesh, Hampi, Coorg..."
-                className="input-field"
-                required={destinationMode === 'known'}
+                onChange={(val) => setKnownDestination(val)}
+                placeholder="Search destination city…"
+                icon={<Navigation className="w-5 h-5" />}
               />
               <p className="text-xs text-gray-400 mt-2">
-                We&apos;ll skip recommendations and build your itinerary directly.
+                We&apos;ll build your itinerary for this destination directly.
               </p>
             </div>
           )}
         </div>
 
-        <div className="h-px bg-gray-100 my-8" />
+        <div className="h-px bg-white/10 my-6" />
 
         {/* Budget + Days */}
         <div className="grid grid-cols-2 gap-4">
