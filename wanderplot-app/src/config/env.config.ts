@@ -28,10 +28,27 @@ export const env = {
 
   // ─── Google Gemini ───────────────────────────────────────────────────────────
   geminiApiKey: process.env.GEMINI_API_KEY,
+  /**
+   * All configured Gemini keys, in rotation order. We try GEMINI_API_KEY first,
+   * then GEMINI_API_KEY_1..3 — on a 429 (quota) we transparently fail over to the
+   * next key so one exhausted key never breaks generation.
+   */
+  geminiApiKeys: [
+    process.env.GEMINI_API_KEY,
+    process.env.GEMINI_API_KEY_1,
+    process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_API_KEY_3,
+  ].filter((k): k is string => !!k && k.trim().length > 0),
   /** Accuracy-critical calls (itinerary prose, grounded enrichment) */
-  geminiModel: process.env.GEMINI_MODEL || 'gemini-1.5-pro',
+  geminiModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
   /** High-frequency calls (geocoding, candidate generation). Defaults to geminiModel. */
-  geminiFastModel: process.env.GEMINI_FAST_MODEL || process.env.GEMINI_MODEL || 'gemini-1.5-pro',
+  geminiFastModel: process.env.GEMINI_FAST_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+  /**
+   * Thinking-token budget for Gemini 2.5/3.x "thinking" models.
+   * 0 = thinking OFF — the single biggest latency/cost win (≈30s → ≈3-9s per call).
+   * Raise (e.g. 512) only if you want deeper reasoning and can tolerate the latency.
+   */
+  geminiThinkingBudget: parseInt(process.env.GEMINI_THINKING_BUDGET || '0', 10),
 
   // ─── OpenAI ──────────────────────────────────────────────────────────────────
   openaiApiKey: process.env.OPENAI_API_KEY,

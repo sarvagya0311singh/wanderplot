@@ -29,47 +29,162 @@ export interface LlmStructuredOptions {
   model?: string;
   /** If true, enable Gemini JSON mode (responseMimeType: application/json). Default false. */
   jsonMode?: boolean;
-  /** Abort if the call takes longer than this many ms. Default 15000. */
+  /** Abort if the call takes longer than this many ms. Default 60000. */
   timeoutMs?: number;
+  /**
+   * Per-call thinking-token budget override. Defaults to env.geminiThinkingBudget (0).
+   * Use a small budget (e.g. 512) for quality-critical calls (itinerary) so the model
+   * sanity-checks constraints; keep 0 for mechanical calls (geocoding, candidate gen).
+   */
+  thinkingBudget?: number;
 }
 
-// ─── Gemini Provider ──────────────────────────────────────────────────────────
+// ─── Typed LLM error ──────────────────────────────────────────────────────────
+
+export type LlmErrorKind =
+  | 'quota'        // 429 RESOURCE_EXHAUSTED — all keys exhausted
+  | 'timeout'      // exceeded timeoutMs
+  | 'invalid_key'  // 400/403 API_KEY_INVALID / PERMISSION_DENIED
+  | 'unavailable'  // 503 UNAVAILABLE / overloaded — retries exhausted
+  | 'bad_request'  // 400 INVALID_ARGUMENT (e.g. bad model name / config)
+  | 'empty'        // model returned no text (safety block / truncation)
+  | 'unknown';
+
+export class LlmError extends Error {
+  kind: LlmErrorKind;
+  status?: number;
+  constructor(kind: LlmErrorKind, message: string, status?: number) {
+    super(message);
+    this.name = 'LlmError';
+    this.kind = kind;
+    this.status = status;
+  }
+}
+
+// ─── Gemini Provider (direct REST — no deprecated SDK) ─────────────────────────
+//
+// Why REST instead of @google/generative-ai:
+//   • The SDK (v0.x) is deprecated and does NOT pass `thinkingConfig` through —
+//     and disabling "thinking" is THE fix for the 30s timeouts (thinking models
+//     burn ~1000+ hidden tokens and take ~30s; budget 0 → ~3-9s).
+//   • REST gives us full control: thinking budget, key rotation, retry on
+//     transient 503/429, and precise error classification.
+
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 async function callGemini(
   prompt: string,
   systemPrompt?: string,
   opts?: Omit<LlmStructuredOptions, 'prompt' | 'systemPrompt'>
 ): Promise<LlmResponse> {
-  if (!env.geminiApiKey) {
-    throw new Error('GEMINI_API_KEY is not set in .env.local');
+  const keys = env.geminiApiKeys.length > 0
+    ? env.geminiApiKeys
+    : (env.geminiApiKey ? [env.geminiApiKey] : []);
+  if (keys.length === 0) {
+    throw new LlmError('invalid_key', 'GEMINI_API_KEY is not set in .env.local');
   }
-  const { GoogleGenerativeAI } = await import('@google/generative-ai');
-  const genAI = new GoogleGenerativeAI(env.geminiApiKey);
 
   const modelName = opts?.model ?? env.geminiModel;
   const temperature = opts?.temperature ?? 0.7;
   const jsonMode = opts?.jsonMode ?? false;
+  const timeoutMs = opts?.timeoutMs ?? 60_000;
+  const thinkingBudget = opts?.thinkingBudget ?? env.geminiThinkingBudget;
 
-  const model = genAI.getGenerativeModel({
-    model: modelName,
-    systemInstruction: systemPrompt,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const body: Record<string, any> = {
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: {
       temperature,
+      // thinkingBudget 0 = thinking off (mechanical calls); a small budget (e.g. 512)
+      // lets quality-critical calls sanity-check constraints. Bounded → no 30s timeouts.
+      thinkingConfig: { thinkingBudget },
       ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
     },
-  });
+  };
+  if (systemPrompt) {
+    body.systemInstruction = { parts: [{ text: systemPrompt }] };
+  }
 
-  const timeoutMs = opts?.timeoutMs ?? 45_000;
+  const MAX_ATTEMPTS = Math.max(keys.length * 2, 4);
+  let keyIdx = 0;
+  let lastErr: LlmError | null = null;
 
-  const generatePromise = model.generateContent(prompt);
-  const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error(`Gemini call timed out after ${timeoutMs}ms`)), timeoutMs)
-  );
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const apiKey = keys[keyIdx % keys.length];
+    const url = `${GEMINI_API_BASE}/models/${modelName}:generateContent?key=${apiKey}`;
 
-  const result = await Promise.race([generatePromise, timeoutPromise]);
-  const text = result.response.text();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
 
-  return { text, model: modelName, provider: 'gemini' };
+      if (res.ok) {
+        const data = await res.json();
+        const parts = data?.candidates?.[0]?.content?.parts ?? [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const text = parts.map((p: any) => p?.text ?? '').join('').trim();
+        if (!text) {
+          const finish = data?.candidates?.[0]?.finishReason ?? data?.promptFeedback?.blockReason;
+          throw new LlmError('empty', `Gemini returned no text (finishReason: ${finish ?? 'unknown'})`);
+        }
+        return { text, model: modelName, provider: 'gemini' };
+      }
+
+      // Non-OK — classify
+      const errBody = await res.json().catch(() => ({}));
+      const status: string = errBody?.error?.status ?? '';
+      const message: string = errBody?.error?.message ?? `HTTP ${res.status}`;
+
+      if (res.status === 429 || status === 'RESOURCE_EXHAUSTED') {
+        lastErr = new LlmError('quota', `Quota exhausted on key #${(keyIdx % keys.length) + 1}: ${message}`, 429);
+        keyIdx++; // rotate to the next key
+        await sleep(400);
+        continue;
+      }
+      if (res.status === 503 || res.status === 500 || status === 'UNAVAILABLE' || status === 'INTERNAL') {
+        lastErr = new LlmError('unavailable', `Gemini transient error: ${message}`, res.status);
+        await sleep(600 * (attempt + 1)); // backoff, same key
+        continue;
+      }
+      if (res.status === 403 || /API_KEY_INVALID|PERMISSION_DENIED/.test(status) || /API key not valid/i.test(message)) {
+        throw new LlmError('invalid_key', `Gemini key rejected: ${message}`, res.status);
+      }
+      if (res.status === 404) {
+        throw new LlmError('bad_request', `Model "${modelName}" not found or unavailable to this key: ${message}`, 404);
+      }
+      if (res.status === 400) {
+        throw new LlmError('bad_request', `Gemini bad request: ${message}`, 400);
+      }
+      lastErr = new LlmError('unknown', `Gemini error (${res.status}): ${message}`, res.status);
+      await sleep(400);
+    } catch (err) {
+      clearTimeout(timer);
+      if (err instanceof LlmError) {
+        // Non-retryable kinds bubble up immediately
+        if (err.kind === 'invalid_key' || err.kind === 'bad_request') throw err;
+        lastErr = err;
+        continue;
+      }
+      if (err instanceof Error && err.name === 'AbortError') {
+        lastErr = new LlmError('timeout', `Gemini call timed out after ${timeoutMs}ms`);
+        await sleep(300);
+        continue;
+      }
+      lastErr = new LlmError('unknown', err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  throw lastErr ?? new LlmError('unknown', 'Gemini call failed after retries');
 }
 
 // ─── OpenAI Provider ──────────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ export type PlanStep = 'intake' | 'recommendations' | 'itinerary';
 
 export interface TripInputsState {
   origin: string;
+  originCoords?: { lat: number; lng: number };
   budget: number;
   month: number;
   days: number;
@@ -47,6 +48,8 @@ export default function PlanPage() {
   const [loadingMsg, setLoadingMsg] = useState('');
   const [savedTripId, setSavedTripId] = useState<string | null>(null);
   const [llmError, setLlmError] = useState(false);
+  const [llmErrorMsg, setLlmErrorMsg] = useState('');
+  const [llmErrorKind, setLlmErrorKind] = useState('');
   const [relaxedMsg, setRelaxedMsg] = useState<string | undefined>();
   const [sourceFlag, setSourceFlag] = useState<string>('local');
 
@@ -81,10 +84,15 @@ export default function PlanPage() {
       if (!res.ok) {
         throw new Error(json.error || json.detail || 'Recommendation failed');
       }
-      setRecommendations(json.results);
-      setSourceFlag(json.source ?? 'local');
-      if (json.relaxedMessage) setRelaxedMsg(json.relaxedMessage);
-      setStep('recommendations');
+      if (data.knownDestination && json.results.length === 1) {
+        // Skip recommendations view entirely
+        handleSelectDestination(json.results[0], data);
+      } else {
+        setRecommendations(json.results);
+        setSourceFlag(json.source ?? 'local');
+        if (json.relaxedMessage) setRelaxedMsg(json.relaxedMessage);
+        setStep('recommendations');
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       toast.error(`Recommendation failed: ${msg}`, { duration: 6000 });
@@ -95,23 +103,26 @@ export default function PlanPage() {
     }
   };
 
-  const handleSelectDestination = async (dest: ScoredDestination) => {
+  const handleSelectDestination = async (dest: ScoredDestination, currentInputs?: TripInputsState) => {
     setSelectedDest(dest);
     setLlmError(false);
     setLoading(true);
     setLoadingMsg(LOADING_MESSAGES.itinerary);
     try {
+      const activeInputs = currentInputs || inputs;
       const res = await fetch('/api/itinerary/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           destination: dest.destination,
-          inputs,
+          inputs: activeInputs,
         }),
       });
       const json = await res.json();
       if (!res.ok) {
         if (res.status === 503) {
+          setLlmErrorMsg(json.error || 'Itinerary generation failed. Please try again.');
+          setLlmErrorKind(json.errorKind || 'unknown');
           setLlmError(true);
           setStep('itinerary');
           return;
@@ -306,7 +317,7 @@ export default function PlanPage() {
           </div>
         )}
 
-        {/* LLM not configured / Quota Exceeded — friendly setup prompt */}
+        {/* Itinerary generation failed — accurate, honest error + retry */}
         {step === 'itinerary' && selectedDest && llmError && (
           <div className="animate-fade-in max-w-lg mx-auto">
             <div className="card p-8 text-center">
@@ -314,38 +325,33 @@ export default function PlanPage() {
                 <AlertTriangle className="w-8 h-8 text-amber-500" />
               </div>
               <h2 className="font-display font-bold text-2xl text-white mb-2">
-                API Key Invalid or Quota Exceeded
+                {llmErrorKind === 'unavailable' || llmErrorKind === 'timeout'
+                  ? 'AI is busy right now'
+                  : llmErrorKind === 'quota'
+                  ? 'Rate limit reached'
+                  : 'Couldn’t generate the itinerary'}
               </h2>
               <p className="text-zinc-400 mb-6 leading-relaxed">
-                You selected <strong>{selectedDest.destination.name}</strong>, but the itinerary generation failed. 
-                Your current Gemini API key either has a 0 limit or is exhausted.
+                We couldn’t finish the plan for <strong>{selectedDest.destination.name}</strong>.
+                <br />
+                {llmErrorMsg || 'Please try again.'}
               </p>
-              <div className="text-left bg-black/40 border border-white/10 rounded-2xl p-5 mb-6 space-y-3 text-sm">
-                <div className="flex items-start gap-3">
-                  <Info className="w-5 h-5 text-brand mt-0.5 flex-none" />
-                  <div>
-                    <p className="font-semibold text-white">How to fix this (Important!)</p>
-                    <p className="text-zinc-400 mt-1">
-                      Your key starts with <code>AQ...</code> which means it belongs to an internal project with a 0 limit. You need a standard key starting with <code>AIzaSy...</code>
-                    </p>
-                    <ol className="list-decimal ml-4 mt-3 text-zinc-400 space-y-1">
-                      <li>Go to <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-brand hover:underline">aistudio.google.com</a></li>
-                      <li>Click <strong>Create API key</strong></li>
-                      <li>Select <strong>Create API key in new project</strong> (Do NOT use the existing gen-lang-client project)</li>
-                      <li>Paste the new <code>AIzaSy...</code> key into <code>.env.local</code></li>
-                    </ol>
-                  </div>
-                </div>
+              <div className="flex flex-col gap-3">
+                {/* Retry — most failures (overload/timeout) succeed on a second attempt */}
+                <button
+                  onClick={() => { setLlmError(false); handleSelectDestination(selectedDest, inputs ?? undefined); }}
+                  className="btn-primary w-full justify-center"
+                  disabled={loading}
+                >
+                  ↻ Try again
+                </button>
+                <button
+                  onClick={() => { setStep('recommendations'); setLlmError(false); }}
+                  className="btn-terracotta w-full"
+                >
+                  ← Back to Destinations
+                </button>
               </div>
-              <button
-                onClick={() => {
-                  setStep('recommendations');
-                  setLlmError(false);
-                }}
-                className="btn-terracotta w-full"
-              >
-                ← Back to Destinations
-              </button>
             </div>
           </div>
         )}

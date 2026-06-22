@@ -2,10 +2,12 @@
 import { useState } from 'react';
 import {
   MapPin, Calendar, Users, Gauge, Palette, Star, Ban, Shuffle,
-  ArrowRight, IndianRupee, Navigation, Hash,
+  ArrowRight, IndianRupee, Navigation, Hash, Check
 } from 'lucide-react';
 import type { TripInputsState } from '@/app/plan/page';
 import { defaultPartySize } from '@/lib/recommend';
+import CityCombobox from './CityCombobox';
+import { indianCities } from '@/data/indianCities';
 
 const SCENERY_OPTIONS = [
   { value: 'mountains', label: 'Mountains', emoji: '🏔️' },
@@ -46,6 +48,7 @@ interface Props {
 
 export function PlannerForm({ onSubmit }: Props) {
   const [origin, setOrigin] = useState('');
+  const [originCoords, setOriginCoords] = useState<{lat: number, lng: number} | undefined>();
   const [budget, setBudget] = useState(15000);
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [days, setDays] = useState(4);
@@ -55,8 +58,10 @@ export function PlannerForm({ onSubmit }: Props) {
   const [scenery, setScenery] = useState<string[]>([]);
   const [experience, setExperience] = useState<string[]>([]);
   const [dealbreakers, setDealbreakers] = useState<string[]>([]);
+  
+  // Known Destination mode
+  const [destinationMode, setDestinationMode] = useState<'recommend' | 'known'>('recommend');
   const [knownDestination, setKnownDestination] = useState('');
-  const [showKnownDest, setShowKnownDest] = useState(false);
 
   const toggleMulti = (
     arr: string[],
@@ -68,7 +73,6 @@ export function PlannerForm({ onSubmit }: Props) {
 
   const handleGroupTypeChange = (val: string) => {
     setGroupType(val);
-    // Auto-update partySize to the sensible default for the group
     setPartySize(defaultPartySize(val));
   };
 
@@ -78,13 +82,14 @@ export function PlannerForm({ onSubmit }: Props) {
     setPace('moderate');
     onSubmit({
       origin: origin || 'Delhi',
+      originCoords,
       budget, month, days, groupType,
       partySize,
       pace: 'moderate',
       scenery: [],
       experience: [],
       dealbreakers,
-      knownDestination: knownDestination.trim() || undefined,
+      knownDestination: undefined,
     });
   };
 
@@ -92,10 +97,11 @@ export function PlannerForm({ onSubmit }: Props) {
     e.preventDefault();
     onSubmit({
       origin,
+      originCoords,
       budget, month, days, groupType,
       partySize,
       pace, scenery, experience, dealbreakers,
-      knownDestination: showKnownDest && knownDestination.trim() ? knownDestination.trim() : undefined,
+      knownDestination: destinationMode === 'known' && knownDestination.trim() ? knownDestination.trim() : undefined,
     });
   };
 
@@ -109,16 +115,68 @@ export function PlannerForm({ onSubmit }: Props) {
             <MapPin className="w-4 h-4 text-brand" />
             Where are you travelling from?
           </label>
-          <input
-            id="origin-input"
-            type="text"
-            value={origin}
-            onChange={(e) => setOrigin(e.target.value)}
-            placeholder="e.g. Mumbai, Delhi, Bangalore..."
-            className="input-field"
-            required
+          <CityCombobox 
+            items={indianCities} 
+            value={origin} 
+            onChange={(val, coords) => {
+              setOrigin(val);
+              if (coords) setOriginCoords(coords);
+            }} 
           />
         </div>
+
+        {/* Destination Mode Toggle */}
+        <div>
+          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
+            <Navigation className="w-4 h-4 text-brand" />
+            Where do you want to go?
+          </label>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <button
+              type="button"
+              onClick={() => setDestinationMode('recommend')}
+              className={`py-3 px-4 rounded-xl border-2 flex items-center justify-center gap-2 transition-all ${
+                destinationMode === 'recommend' 
+                  ? 'bg-brand/5 border-brand text-brand' 
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-brand/40'
+              }`}
+            >
+              {destinationMode === 'recommend' ? <Check className="w-4 h-4" /> : null}
+              <span className="font-medium text-sm">Help me decide</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setDestinationMode('known')}
+              className={`py-3 px-4 rounded-xl border-2 flex items-center justify-center gap-2 transition-all ${
+                destinationMode === 'known' 
+                  ? 'bg-brand/5 border-brand text-brand' 
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-brand/40'
+              }`}
+            >
+              {destinationMode === 'known' ? <Check className="w-4 h-4" /> : null}
+              <span className="font-medium text-sm">I have a destination</span>
+            </button>
+          </div>
+
+          {destinationMode === 'known' && (
+            <div className="mt-2 animate-in slide-in-from-top-2 opacity-0 fade-in duration-300">
+              <input
+                id="known-destination-input"
+                type="text"
+                value={knownDestination}
+                onChange={(e) => setKnownDestination(e.target.value)}
+                placeholder="e.g. Rishikesh, Hampi, Coorg..."
+                className="input-field"
+                required={destinationMode === 'known'}
+              />
+              <p className="text-xs text-gray-400 mt-2">
+                We&apos;ll skip recommendations and build your itinerary directly.
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="h-px bg-gray-100 my-8" />
 
         {/* Budget + Days */}
         <div className="grid grid-cols-2 gap-4">
@@ -267,55 +325,59 @@ export function PlannerForm({ onSubmit }: Props) {
           </div>
         </div>
 
-        {/* Scenery */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
-            <Palette className="w-4 h-4 text-brand" />
-            Scenery Preference <span className="text-gray-400 font-normal ml-1">(pick any)</span>
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {SCENERY_OPTIONS.map((s) => (
-              <button
-                key={s.value}
-                type="button"
-                onClick={() => toggleMulti(scenery, setScenery, s.value)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium transition-all border-2 ${
-                  scenery.includes(s.value)
-                    ? 'bg-teal-600 text-white border-teal-600'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-teal-300'
-                }`}
-              >
-                <span>{s.emoji}</span>
-                {s.label}
-              </button>
-            ))}
+        {/* Scenery (only in recommend mode) */}
+        {destinationMode === 'recommend' && (
+          <div>
+            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
+              <Palette className="w-4 h-4 text-brand" />
+              Scenery Preference <span className="text-gray-400 font-normal ml-1">(pick any)</span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {SCENERY_OPTIONS.map((s) => (
+                <button
+                  key={s.value}
+                  type="button"
+                  onClick={() => toggleMulti(scenery, setScenery, s.value)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium transition-all border-2 ${
+                    scenery.includes(s.value)
+                      ? 'bg-teal-600 text-white border-teal-600'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-teal-300'
+                  }`}
+                >
+                  <span>{s.emoji}</span>
+                  {s.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Experience */}
-        <div>
-          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
-            <Star className="w-4 h-4 text-brand" />
-            Experience Type <span className="text-gray-400 font-normal ml-1">(pick any)</span>
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {EXPERIENCE_OPTIONS.map((e) => (
-              <button
-                key={e.value}
-                type="button"
-                onClick={() => toggleMulti(experience, setExperience, e.value)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium transition-all border-2 ${
-                  experience.includes(e.value)
-                    ? 'bg-amber text-white border-amber'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-amber/40'
-                }`}
-              >
-                <span>{e.emoji}</span>
-                {e.label}
-              </button>
-            ))}
+        {/* Experience (only in recommend mode) */}
+        {destinationMode === 'recommend' && (
+          <div>
+            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
+              <Star className="w-4 h-4 text-brand" />
+              Experience Type <span className="text-gray-400 font-normal ml-1">(pick any)</span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {EXPERIENCE_OPTIONS.map((e) => (
+                <button
+                  key={e.value}
+                  type="button"
+                  onClick={() => toggleMulti(experience, setExperience, e.value)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium transition-all border-2 ${
+                    experience.includes(e.value)
+                      ? 'bg-amber text-white border-amber'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-amber/40'
+                  }`}
+                >
+                  <span>{e.emoji}</span>
+                  {e.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Dealbreakers */}
         <div>
@@ -347,47 +409,22 @@ export function PlannerForm({ onSubmit }: Props) {
           </div>
         </div>
 
-        {/* Known destination — §9.3 */}
-        <div>
-          <button
-            type="button"
-            onClick={() => setShowKnownDest(!showKnownDest)}
-            className="flex items-center gap-2 text-sm text-brand font-medium hover:underline"
-          >
-            <Navigation className="w-4 h-4" />
-            {showKnownDest ? 'Hide' : 'I already have a destination in mind →'}
-          </button>
-          {showKnownDest && (
-            <div className="mt-3">
-              <input
-                id="known-destination-input"
-                type="text"
-                value={knownDestination}
-                onChange={(e) => setKnownDestination(e.target.value)}
-                placeholder="e.g. Rishikesh, Hampi, Coorg..."
-                className="input-field"
-              />
-              <p className="text-xs text-gray-400 mt-1.5">
-                We&apos;ll validate it and build your itinerary directly.
-              </p>
-            </div>
-          )}
-        </div>
-
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-3 pt-2">
           <button type="submit" id="find-destinations-btn" className="btn-primary flex-1 justify-center py-4 text-base">
-            Find My Destinations
+            {destinationMode === 'known' ? 'Build Itinerary' : 'Find My Destinations'}
             <ArrowRight className="w-5 h-5" />
           </button>
-          <button
-            type="button"
-            onClick={handleSurpriseMe}
-            className="btn-secondary flex-none px-5 py-4 text-sm gap-1.5"
-          >
-            <Shuffle className="w-4 h-4" />
-            Surprise Me
-          </button>
+          {destinationMode === 'recommend' && (
+            <button
+              type="button"
+              onClick={handleSurpriseMe}
+              className="btn-secondary flex-none px-5 py-4 text-sm gap-1.5"
+            >
+              <Shuffle className="w-4 h-4" />
+              Surprise Me
+            </button>
+          )}
         </div>
       </div>
     </form>

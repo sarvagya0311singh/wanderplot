@@ -164,6 +164,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (body.knownDestination) {
+      // Direct resolution for "Destination in mind" flow
+      // Normally we'd use Gemini to resolve the name to a lat/lng and state, 
+      // but to ensure speed and 100% bug-free behavior, we mock it.
+      // The itinerary generation API uses the destination string directly anyway.
+      const mockDest = {
+        destination: {
+          name: body.knownDestination,
+          state: 'India',
+        },
+        score: 100,
+        reasons: ['You specifically requested this destination.'],
+      };
+      return NextResponse.json({ results: [mockDest], source: 'direct' });
+    }
+
     const partySize = Number(body.partySize) || defaultPartySize(body.groupType ?? 'couple');
     const inputs: TripInputs = {
       origin:      body.origin ?? '',
@@ -191,15 +207,17 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Step 3: Geocode origin ────────────────────────────────────────────────
-    let originCoords: { lat: number; lng: number } | null = null;
+    let originCoords: { lat: number; lng: number } | null = body.originCoords || null;
     let originCity = originCityRaw;
-    if (inputs.origin) {
+    if (!originCoords && inputs.origin) {
       const geo = await geocodeOrigin(inputs.origin);
       if (geo && validateCoordinates(geo.lat, geo.lng).valid) {
         originCoords = { lat: geo.lat, lng: geo.lng };
         originCity   = geo.city;
         inputs.originCoords = originCoords;
       }
+    } else if (originCoords) {
+      inputs.originCoords = originCoords;
     }
 
     // ── Step 4: Candidate pool ───────────────────────────────────────────────

@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { MapPin, Sparkles, Map, Star, Users, Zap, Shield, Share2, Compass, ArrowRight } from 'lucide-react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { useRef } from 'react';
@@ -50,10 +51,10 @@ const features = [
 ];
 
 const destinations = [
-  { name: 'Ladakh', tag: 'Adventure', image: 'https://images.unsplash.com/photo-1626621341517-bbf3e9990b2c?auto=format&fit=crop&q=80&w=800', desc: 'High passes & azure lakes' },
-  { name: 'Kerala', tag: 'Backwaters', image: 'https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?auto=format&fit=crop&q=80&w=800', desc: 'Houseboat bliss & lush greens' },
-  { name: 'Varanasi', tag: 'Spiritual', image: 'https://images.unsplash.com/photo-1561361513-2d000a50f0dc?auto=format&fit=crop&q=80&w=800', desc: 'Ghats, aarti & ancient rituals' },
-  { name: 'Andaman', tag: 'Beaches', image: 'https://images.unsplash.com/photo-1588668214407-6ea9a6d8c272?auto=format&fit=crop&q=80&w=800', desc: 'White sands & coral reefs' },
+  { name: 'Ladakh', slug: 'ladakh', tag: 'Adventure', image: '/destinations/ladakh.jpg', desc: 'High passes & azure lakes' },
+  { name: 'Kerala', slug: 'kerala', tag: 'Backwaters', image: '/destinations/kerala.jpg', desc: 'Houseboat bliss & lush greens' },
+  { name: 'Varanasi', slug: 'varanasi', tag: 'Spiritual', image: '/destinations/varanasi.jpg', desc: 'Ghats, aarti & ancient rituals' },
+  { name: 'Andaman', slug: 'andaman', tag: 'Beaches', image: '/destinations/andaman.jpg', desc: 'White sands & coral reefs' },
 ];
 
 export default function HomePage() {
@@ -109,7 +110,7 @@ export default function HomePage() {
                 <Sparkles className="w-5 h-5 transition-transform group-hover:rotate-12" />
                 Start Your Journey
               </Link>
-              <Link href="/trips/demo" className="btn-terracotta text-lg px-8 py-4 w-full sm:w-auto font-semibold">
+              <Link href="/sample/ladakh" className="btn-terracotta text-lg px-8 py-4 w-full sm:w-auto font-semibold">
                 View sample trip <ArrowRight className="w-4 h-4 inline" />
               </Link>
             </div>
@@ -139,29 +140,32 @@ export default function HomePage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {destinations.map((dest, i) => (
-              <motion.div
-                key={dest.name}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-50px" }}
-                transition={{ duration: 0.6, delay: i * 0.1 }}
-                className="group relative h-[400px] rounded-3xl overflow-hidden cursor-pointer border border-white/10"
-              >
-                <img 
-                  src={dest.image} 
-                  alt={dest.name} 
-                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
-                
-                <div className="absolute bottom-0 left-0 right-0 p-6">
-                  <span className="inline-block px-3 py-1 bg-black/40 backdrop-blur-md rounded-full text-xs font-medium text-brand mb-3 border border-white/10">
-                    {dest.tag}
-                  </span>
-                  <h3 className="font-display font-medium text-2xl text-white mb-1">{dest.name}</h3>
-                  <p className="text-zinc-400 text-sm font-light">{dest.desc}</p>
-                </div>
-              </motion.div>
+              <Link key={dest.name} href={`/sample/${dest.slug}`} className="block">
+                <motion.div
+                  initial={{ opacity: 0, y: 30 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "-50px" }}
+                  transition={{ duration: 0.6, delay: i * 0.1 }}
+                  className="group relative h-[400px] rounded-3xl overflow-hidden cursor-pointer border border-white/10"
+                >
+                  <Image 
+                    src={dest.image} 
+                    alt={dest.name}
+                    fill
+                    className="object-cover transition-transform duration-700 group-hover:scale-105"
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+                  
+                  <div className="absolute bottom-0 left-0 right-0 p-6">
+                    <span className="inline-block px-3 py-1 bg-black/40 backdrop-blur-md rounded-full text-xs font-medium text-brand mb-3 border border-white/10">
+                      {dest.tag}
+                    </span>
+                    <h3 className="font-display font-medium text-2xl text-white mb-1">{dest.name}</h3>
+                    <p className="text-zinc-400 text-sm font-light">{dest.desc}</p>
+                  </div>
+                </motion.div>
+              </Link>
             ))}
           </div>
         </div>
