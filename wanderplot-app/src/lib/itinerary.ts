@@ -7,13 +7,14 @@
 import { createHash } from 'crypto';
 import { callLLMStructured, parseLlmJson, activeLlmLabel } from '@/lib/llm';
 import { isDbConfigured } from '@/config/env.config';
+import { Vehicle } from '@/lib/transport';
 
 /**
  * Cache-key version. BUMP THIS whenever the prompt, output schema, or model
  * materially changes — old cache entries stop matching automatically, so a
  * deploy can never serve a stale-schema itinerary. No manual flush needed.
  */
-export const ITINERARY_CACHE_VERSION = 'v2-2025-06';
+export const ITINERARY_CACHE_VERSION = 'v3-2026-06';
 
 /** The generated itinerary JSON shape is dynamic (LLM output) — typed loosely on purpose. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -53,6 +54,8 @@ export interface ItineraryInputs {
   experience: string[];
   dealbreakers: string[];
   partySize?: number;
+  vehicle?: Vehicle;
+  maxDistanceKm?: number;
 }
 
 // ─── Cache key (versioned + banded) ───────────────────────────────────────────
@@ -71,10 +74,23 @@ export function buildItineraryCacheKey(destination: ItineraryDestination, inputs
     partySize,
     experience: [...(inputs.experience ?? [])].sort(),
     dealbreakers: [...(inputs.dealbreakers ?? [])].sort(),
+    vehicle: inputs.vehicle ?? 'flexible',
+    maxDistanceKm: inputs.maxDistanceKm ?? 0,
   })).digest('hex');
 }
 
 // ─── Prompt builder ────────────────────────────────────────────────────────────
+
+function transportGuidance(v: Vehicle): string {
+  switch (v) {
+    case 'bike': return `TRANSPORT = MOTORCYCLE ROAD TRIP. Structure each travel day as ride legs with approx km and riding hours (target ~300 km/day on highways, ~200 km/day in hills). Start at dawn, finish before dusk (no night riding). Call out fuel stops (flag stretches where pumps are 150+ km apart) and tea/rest breaks. Add a riding-gear & spares packing list (layered gear, gloves, rain cover, spare tube/levers, offline maps). For hill/high-altitude routes include acclimatization rest day(s) and a road-condition/weather caveat.`;
+    case 'car': return `TRANSPORT = SELF-DRIVE CAR ROAD TRIP. Structure travel days as driving legs with approx km and time (cap ~400 km/day; assume ~45–55 km/h effective on Indian highways). Add scenic stops, food halts, parking and toll notes, and recommend early starts.`;
+    case 'bus': return `TRANSPORT = INTERCITY BUS. Use intercity legs, prefer one overnight sleeper/Volvo leg to save a hotel night; note boarding and drop-off points; arrange in-destination local transport. No self-driving.`;
+    case 'train': return `TRANSPORT = TRAIN. Use rail legs with station transfers; recommend class (3A/2A AC for overnight) and use overnight trains to save a hotel night; mention nearest railhead + last-mile to the destination and the IRCTC 120-day/Tatkal booking tip. No inter-city driving.`;
+    case 'flight': return `TRANSPORT = FLIGHT. Include airport transfers at both ends and a ~2 hr check-in/security buffer and baggage note; then make the rest of the plan purely local/in-city — NO inter-city driving days. Maximise time at the destination.`;
+    default: return `TRANSPORT = FLEXIBLE. Suggest the most sensible mix of transport for the route.`;
+  }
+}
 
 export function buildItineraryPrompt(destination: ItineraryDestination, inputs: ItineraryInputs): string {
   const partySize = Math.max(inputs.partySize ?? 1, 1);
@@ -95,6 +111,7 @@ Traveller details:
 - Pace: ${inputs.pace}
 - Interests: ${inputs.experience.join(', ') || 'general'}
 - Constraints: ${inputs.dealbreakers.join(', ') || 'none'}
+- ${transportGuidance(inputs.vehicle ?? 'flexible')}
 ${destination.accessibilityNote ? `- Accessibility: ${destination.accessibilityNote}` : ''}
 ${destination.monsoonRisk ? `- Note: Monsoon risk this month — include weather-contingency suggestions` : ''}
 ${activeEvents.length > 0 ? `- Active festivals/events: ${activeEvents.join(', ')} — include these in the plan where relevant` : ''}
@@ -130,6 +147,7 @@ Return a JSON object with this exact structure:
 Rules:
 - estimatedCost per day is for the WHOLE PARTY (${partySize} person${partySize > 1 ? 's' : ''}) in INR
 - budgetBreakdown values are for the WHOLE PARTY; total must not exceed ₹${totalBudget.toLocaleString('en-IN')}
+- The budgetBreakdown 'transport' figure must reflect the chosen mode (fuel/tolls for bike/car, tickets for bus/train/flight).
 - packingList specific to destination, season (${monthName}), and activities
 - For ${inputs.pace} pace: ${inputs.pace === 'packed' ? '4-5 activities per day' : inputs.pace === 'moderate' ? '2-3 activities per day with rest time' : '1-2 activities with lots of leisure'}
 ${inputs.dealbreakers.includes('vegetarian') ? '- All food recommendations must be vegetarian' : ''}`;

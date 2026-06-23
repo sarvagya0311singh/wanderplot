@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useCombobox } from 'downshift';
 import { MapPin, Search } from 'lucide-react';
 import { IndianCity } from '@/data/indianCities';
@@ -13,6 +13,19 @@ interface CityComboboxProps {
 
 export default function CityCombobox({ items, value, onChange, placeholder = 'Search city...', icon }: CityComboboxProps) {
   const [inputItems, setInputItems] = useState<IndianCity[]>(items.slice(0, 8));
+
+  useEffect(() => {
+    if (!value) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setInputItems(items.slice(0, 8));
+    } else {
+      const lower = value.toLowerCase();
+      const startsWith = items.filter(i => i.name.toLowerCase().startsWith(lower));
+      const includes = items.filter(i => i.name.toLowerCase().includes(lower) && !i.name.toLowerCase().startsWith(lower));
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setInputItems([...startsWith, ...includes].slice(0, 8));
+    }
+  }, [items, value]);
 
   const {
     isOpen,

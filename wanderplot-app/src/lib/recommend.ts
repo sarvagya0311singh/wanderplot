@@ -19,6 +19,8 @@
  *     • Impossible combo → return closest match + conflict explanation
  */
 
+import { Vehicle, isRoadMode, destFeasibility, comfortableKmPerDay, effectiveMaxDistanceMeters } from '@/lib/transport';
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface TripInputs {
@@ -33,6 +35,9 @@ export interface TripInputs {
   experience: string[];      // user-selected — hard filter when non-empty
   dealbreakers: string[];
   partySize: number;
+  surprise?: boolean;
+  vehicle?: Vehicle;
+  maxDistanceKm?: number;
 }
 
 export interface DestinationDoc {
@@ -64,6 +69,9 @@ export interface DestinationDoc {
   kidFriendly?: boolean;
   wheelchairAccessible?: boolean;
   petFriendly?: boolean;
+  isIsland?: boolean;
+  highAltitude?: boolean;
+  hasRailhead?: boolean;
   accessibilityNote?: string | null;
   offSeasonWarning?: string | null;
   events?: { name: string; monthsActive: number[] }[];
@@ -160,6 +168,25 @@ export function passesHardFilters(dest: DestinationDoc, inputs: TripInputs): boo
 
   // 6. Confidence filter — low-confidence destinations only surface in explicit lookup
   if (dest.confidence === 'low') return false;
+
+  // 7. Vehicle / Transport Feasibility Gate
+  const v = inputs.vehicle ?? 'flexible';
+  const feats = destFeasibility(dest);
+
+  if (isRoadMode(v)) {
+    if (feats.isIsland) return false;
+    const tripLenDefaultM = maxDistanceMeters(inputs.days);
+    const effMaxKm = effectiveMaxDistanceMeters(v, inputs.days, inputs.maxDistanceKm, tripLenDefaultM) / 1000;
+    
+    const km = dest.distanceMeters != null 
+      ? dest.distanceMeters / 1000 
+      : inputs.originCoords 
+        ? haversineKm(inputs.originCoords, destCoords(dest)) 
+        : null;
+    if (km != null && km > effMaxKm) return false;
+  }
+  
+  if (v === 'train' && feats.isIsland) return false;
 
   return true;
 }
@@ -299,7 +326,7 @@ export function scoreDestinations(
     const expR      = scoreExperience(dest, inputs.experience);
     const ratingR   = scoreRating(dest);
 
-    const total = Math.round(
+    let total = Math.round(
       seasonR.score   * W.season   +
       budgetR.score   * W.budget   +
       proximityR.score * W.proximity +
@@ -322,6 +349,35 @@ export function scoreDestinations(
       dest.requiresFlight ? 'Requires a flight from origin' : undefined,
       dest.accessibilityNote ?? undefined,
     ].filter(Boolean) as string[];
+
+    // --- Vehicle soft demotions ---
+    const v = inputs.vehicle ?? 'flexible';
+    const feats = destFeasibility(dest);
+
+    if (v === 'train' && feats.hasRailhead === false) {
+      warnings.push("No direct railhead; requires road transfer from nearest major station.");
+    }
+
+    if (isRoadMode(v)) {
+      if (feats.highAltitude && ![6, 7, 8, 9].includes(inputs.month)) {
+        total -= 20; // soft demotion
+        warnings.push("High-altitude roads (e.g. Ladakh/Spiti) are typically open only Jun–Sep; consider flying in or travelling in season.");
+      }
+      
+      const km = dest.distanceMeters != null 
+        ? dest.distanceMeters / 1000 
+        : inputs.originCoords 
+          ? haversineKm(inputs.originCoords, destCoords(dest)) 
+          : null;
+      
+      if (km != null) {
+        const comfDays = comfortableKmPerDay(v) * Math.max(inputs.days, 1);
+        if (km > comfDays) {
+          const splitDays = Math.ceil(km / comfortableKmPerDay(v));
+          warnings.push(`~${Math.round(km)} km is a long haul by ${v} — plan it over ${splitDays} days or consider train/flight.`);
+        }
+      }
+    }
 
     // Active events this month
     const activeEvents = (dest.events ?? []).filter(e => e.monthsActive.includes(inputs.month));
@@ -351,6 +407,40 @@ export function scoreDestinations(
 
 // ─── Honest poor-fit handling (§5.5) ─────────────────────────────────────────
 
+export function diversifyByScenery(
+  candidates: DestinationDoc[], inputs: TripInputs, limit = 8,
+): ScoredDestination[] {
+  const scored = scoreDestinations(candidates, inputs);
+  const buckets = new Map<string, ScoredDestination[]>();
+  for (const s of scored) {
+    const key = s.destination.scenery?.[0] ?? 'other';
+    (buckets.get(key) ?? buckets.set(key, []).get(key)!).push(s);
+  }
+  const order = shuffle([...buckets.keys()]);
+  const picks: ScoredDestination[] = [];
+  let i = 0;
+  while (picks.length < limit && order.some(k => (buckets.get(k)?.length ?? 0) > 0)) {
+    const k = order[i % order.length];
+    const arr = buckets.get(k);
+    if (arr?.length) {
+      const top = arr.splice(0, Math.min(3, arr.length));
+      const chosen = top.splice(Math.floor(Math.random() * top.length), 1)[0];
+      picks.push(chosen);
+      arr.unshift(...top);
+    }
+    i++;
+  }
+  return picks;
+}
+
+function shuffle<T>(a: T[]): T[] {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 export interface RelaxResult {
   results: ScoredDestination[];
   relaxedConstraint?: string;
@@ -368,7 +458,7 @@ export function applyFiltersAndScore(
   inputs: TripInputs
 ): RelaxResult {
   // Tier 1 hard filter
-  let filtered = allDocs.filter(d => passesHardFilters(d, inputs));
+  const filtered = allDocs.filter(d => passesHardFilters(d, inputs));
 
   // Score the filtered set
   let scored = scoreDestinations(filtered, inputs);

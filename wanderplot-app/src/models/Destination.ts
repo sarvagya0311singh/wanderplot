@@ -45,6 +45,9 @@ export interface IDestination extends Document {
   wheelchairAccessible: boolean;
   petFriendly: boolean;
   dealbreakers: string[];
+  isIsland?: boolean;
+  highAltitude?: boolean;
+  hasRailhead?: boolean;
 
   // Rich / display
   description: string;
@@ -108,6 +111,9 @@ const DestinationSchema = new Schema<IDestination>(
     wheelchairAccessible:{ type: Boolean, default: false },
     petFriendly:         { type: Boolean, default: false },
     dealbreakers:        { type: [String], default: [] },
+    isIsland:            { type: Boolean },
+    highAltitude:        { type: Boolean },
+    hasRailhead:         { type: Boolean },
 
     // Rich content
     description:     { type: String, required: true },

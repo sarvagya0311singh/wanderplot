@@ -1,13 +1,14 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   MapPin, Calendar, Users, Gauge, Palette, Star, Ban, Shuffle,
-  ArrowRight, IndianRupee, Navigation, Hash, Check
+  ArrowRight, IndianRupee, Navigation, Hash, Check, Car
 } from 'lucide-react';
 import type { TripInputsState } from '@/app/plan/page';
 import { defaultPartySize } from '@/lib/recommend';
+import { VEHICLES, isRoadMode, comfortableKmPerDay, vehicleMaxKm, Vehicle } from '@/lib/transport';
 import CityCombobox from './CityCombobox';
-import { indianCities } from '@/data/indianCities';
+import type { IndianCity } from '@/data/indianCities';
 
 const SCENERY_OPTIONS = [
   { value: 'mountains', label: 'Mountains', emoji: '🏔️' },
@@ -47,17 +48,35 @@ interface Props {
 }
 
 export function PlannerForm({ onSubmit }: Props) {
+  const [cities, setCities] = useState<IndianCity[]>([]);
+  useEffect(() => {
+    import('@/data/indianCities').then(m => setCities(m.indianCities));
+  }, []);
+
   const [origin, setOrigin] = useState('');
   const [originCoords, setOriginCoords] = useState<{lat: number, lng: number} | undefined>();
   const [budget, setBudget] = useState(15000);
-  const [month, setMonth] = useState(new Date().getMonth() + 1);
+  const [budgetText, setBudgetText] = useState(String(15000));
+  useEffect(() => { 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setBudgetText(String(budget)); 
+  }, [budget]);
+
+  const [month, setMonth] = useState(1);
   const [days, setDays] = useState(4);
-  const [groupType, setGroupType] = useState('couple');
-  const [partySize, setPartySize] = useState(defaultPartySize('couple'));
+  const [daysText, setDaysText] = useState(String(4));
+  useEffect(() => { 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDaysText(String(days)); 
+  }, [days]);
+  const [groupType, setGroupType] = useState('solo');
+  const [partySize, setPartySize] = useState(defaultPartySize('solo'));
   const [pace, setPace] = useState('moderate');
   const [scenery, setScenery] = useState<string[]>([]);
   const [experience, setExperience] = useState<string[]>([]);
   const [dealbreakers, setDealbreakers] = useState<string[]>([]);
+  const [vehicle, setVehicle] = useState<Vehicle>('flexible');
+  const [maxDistanceKm, setMaxDistanceKm] = useState<number | undefined>(undefined);
   
   // Known Destination mode
   const [destinationMode, setDestinationMode] = useState<'recommend' | 'known'>('recommend');
@@ -90,6 +109,8 @@ export function PlannerForm({ onSubmit }: Props) {
       experience: [],
       dealbreakers,
       knownDestination: undefined,
+      surprise: true,
+      vehicle, maxDistanceKm,
     });
   };
 
@@ -102,6 +123,7 @@ export function PlannerForm({ onSubmit }: Props) {
       partySize,
       pace, scenery, experience, dealbreakers,
       knownDestination: destinationMode === 'known' && knownDestination.trim() ? knownDestination.trim() : undefined,
+      vehicle, maxDistanceKm,
     });
   };
 
@@ -116,7 +138,7 @@ export function PlannerForm({ onSubmit }: Props) {
             Where are you travelling from?
           </label>
           <CityCombobox 
-            items={indianCities} 
+            items={cities} 
             value={origin} 
             onChange={(val, coords) => {
               setOrigin(val);
@@ -161,7 +183,7 @@ export function PlannerForm({ onSubmit }: Props) {
           {destinationMode === 'known' && (
             <div className="mt-2 animate-in slide-in-from-top-2 fade-in duration-300">
               <CityCombobox
-                items={indianCities}
+                items={cities}
                 value={knownDestination}
                 onChange={(val) => setKnownDestination(val)}
                 placeholder="Search destination city…"
@@ -183,21 +205,27 @@ export function PlannerForm({ onSubmit }: Props) {
               <IndianRupee className="w-4 h-4 text-brand" />
               Total Budget
             </label>
-            <input
-              id="budget-input"
-              type="range"
-              min={3000}
-              max={200000}
-              step={1000}
-              value={budget}
-              onChange={(e) => setBudget(Number(e.target.value))}
-              className="w-full accent-brand"
-            />
-            <div className="text-center mt-2">
-              <span className="font-bold text-brand text-lg">
-                ₹{budget.toLocaleString('en-IN')}
-              </span>
-              <span className="text-gray-400 text-xs ml-1">total</span>
+            <div className="flex items-center gap-3">
+              <input type="range" min={3000} max={200000} step={1000} value={budget}
+                     onChange={(e) => setBudget(Number(e.target.value))} className="flex-1 accent-brand" />
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
+                <input type="text" inputMode="numeric" value={budgetText}
+                       onChange={(e) => {
+                         const raw = e.target.value.replace(/[^\d]/g, '');
+                         setBudgetText(raw);
+                         if (raw !== '') setBudget(Number(raw));
+                       }}
+                       onBlur={() => {
+                         let v = Number(budgetText);
+                         if (!budgetText || isNaN(v) || v < 3000) v = 3000;
+                         if (v > 200000) v = 200000;
+                         setBudget(v);
+                         setBudgetText(String(v));
+                       }}
+                       className="w-32 border-2 border-gray-200 rounded-xl pl-7 pr-2 py-2 text-sm font-semibold
+                                  text-center focus:outline-none focus:border-brand" />
+              </div>
             </div>
           </div>
           <div>
@@ -205,19 +233,24 @@ export function PlannerForm({ onSubmit }: Props) {
               <Calendar className="w-4 h-4 text-brand" />
               Number of Days
             </label>
-            <input
-              id="days-input"
-              type="range"
-              min={1}
-              max={14}
-              step={1}
-              value={days}
-              onChange={(e) => setDays(Number(e.target.value))}
-              className="w-full accent-brand"
-            />
-            <div className="text-center mt-2">
-              <span className="font-bold text-brand text-lg">{days}</span>
-              <span className="text-gray-400 text-xs ml-1">days</span>
+            <div className="flex items-center gap-3">
+              <input type="range" min={1} max={14} step={1} value={days}
+                     onChange={(e) => setDays(Number(e.target.value))} className="flex-1 accent-brand" />
+              <input type="text" inputMode="numeric" value={daysText}
+                     onChange={(e) => {
+                       const raw = e.target.value.replace(/[^\d]/g, '');
+                       setDaysText(raw);
+                       if (raw !== '') setDays(Number(raw));
+                     }}
+                     onBlur={() => {
+                       let v = Number(daysText);
+                       if (!daysText || isNaN(v) || v < 1) v = 1;
+                       if (v > 14) v = 14;
+                       setDays(v);
+                       setDaysText(String(v));
+                     }}
+                     className="w-20 border-2 border-gray-200 rounded-xl px-2 py-2 text-sm font-semibold
+                                text-center focus:outline-none focus:border-brand" />
             </div>
           </div>
         </div>
@@ -321,6 +354,45 @@ export function PlannerForm({ onSubmit }: Props) {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Vehicle */}
+        <div>
+          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
+            <Car className="w-4 h-4 text-brand" />
+            How will you travel?
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {VEHICLES.map(v => (
+              <button key={v.value} type="button" onClick={() => {
+                setVehicle(v.value);
+                setMaxDistanceKm(isRoadMode(v.value) ? comfortableKmPerDay(v.value) * days : undefined);
+              }} className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all border-2 ${
+                vehicle === v.value
+                  ? 'bg-brand text-white border-brand shadow-md'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-brand/40'
+              }`}>
+                <span>{v.emoji}</span> {v.label}
+              </button>
+            ))}
+          </div>
+          
+          {isRoadMode(vehicle) ? (
+            <div className="mt-5 bg-brand/5 p-4 rounded-xl border border-brand/10">
+              <label className="block text-sm font-semibold text-brand mb-3">Max distance from origin</label>
+              <input type="range" min={50} max={vehicleMaxKm(vehicle)} step={25}
+                     value={maxDistanceKm ?? comfortableKmPerDay(vehicle) * days}
+                     onChange={(e) => setMaxDistanceKm(Number(e.target.value))} className="w-full accent-brand" />
+              <div className="text-center mt-1 text-sm">
+                <span className="font-bold text-brand">{maxDistanceKm ?? comfortableKmPerDay(vehicle) * days} km</span>
+                <span className="text-gray-500 ml-1">one-way radius</span>
+              </div>
+            </div>
+          ) : vehicle !== 'flexible' ? (
+            <div className="mt-3 text-xs text-gray-500 italic px-1">
+              We&apos;ll match rail/air-reachable destinations — distance isn&apos;t a limit.
+            </div>
+          ) : null}
         </div>
 
         {/* Scenery (only in recommend mode) */}

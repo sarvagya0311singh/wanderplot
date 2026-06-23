@@ -1,6 +1,8 @@
 'use client';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
+import { sampleItineraries } from '@/data/sampleItineraries';
 import { MapPin, Sparkles, Map, Star, Users, Zap, Shield, Share2, Compass, ArrowRight } from 'lucide-react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { useRef } from 'react';
@@ -59,6 +61,13 @@ const destinations = [
 
 export default function HomePage() {
   const targetRef = useRef(null);
+  const router = useRouter();
+
+  const viewRandomSample = () => {
+    const slugs = Object.keys(sampleItineraries);
+    const slug = slugs[Math.floor(Math.random() * slugs.length)];
+    router.push(`/sample/${slug}`);
+  };
   const { scrollYProgress } = useScroll({
     target: targetRef,
     offset: ["start start", "end start"]
@@ -110,9 +119,9 @@ export default function HomePage() {
                 <Sparkles className="w-5 h-5 transition-transform group-hover:rotate-12" />
                 Start Your Journey
               </Link>
-              <Link href="/sample/ladakh" className="btn-terracotta text-lg px-8 py-4 w-full sm:w-auto font-semibold">
+              <button onClick={viewRandomSample} className="btn-terracotta text-lg px-8 py-4 w-full sm:w-auto font-semibold">
                 View sample trip <ArrowRight className="w-4 h-4 inline" />
-              </Link>
+              </button>
             </div>
           </motion.div>
         </div>
@@ -240,7 +249,10 @@ export default function HomePage() {
             <Compass className="w-5 h-5 text-brand" />
             <span className="font-display text-lg text-white">WanderPlot</span>
           </div>
-          <p className="font-light">AI-crafted journeys for the modern explorer.</p>
+          <div className="flex flex-col md:flex-row items-center gap-4 text-center md:text-left">
+            <p className="font-light">AI-crafted journeys for the modern explorer.</p>
+            <p className="font-light text-xs text-zinc-600">Geographic data &copy; <a href="https://www.geonames.org/" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-400 underline">GeoNames</a> (CC-BY 4.0)</p>
+          </div>
         </div>
       </footer>
     </div>

@@ -1,10 +1,11 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { PlannerForm } from '@/components/PlannerForm';
 import { DestinationCard } from '@/components/DestinationCard';
 import { ItineraryView } from '@/components/ItineraryView';
 import { Sparkles, MapPin, Map, AlertTriangle, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { Vehicle } from '@/lib/transport';
 
 export type PlanStep = 'intake' | 'recommendations' | 'itinerary';
 
@@ -21,6 +22,9 @@ export interface TripInputsState {
   dealbreakers: string[];
   partySize: number;          // §9.4 — number of travellers
   knownDestination?: string;  // §9.3 — "I know where I want to go"
+  surprise?: boolean;
+  vehicle?: Vehicle;
+  maxDistanceKm?: number;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -53,19 +57,36 @@ export default function PlanPage() {
   const [relaxedMsg, setRelaxedMsg] = useState<string | undefined>();
   const [sourceFlag, setSourceFlag] = useState<string>('local');
 
+  // Reset scroll to the top whenever the planner step changes.
+  // Use an INSTANT jump (not 'smooth') deferred to after the new step paints:
+  // the "Your Itinerary" view runs framer-motion entrance animations and lazy-loads
+  // the map, and those reflows interrupt a smooth-scroll animation, leaving the page
+  // stuck mid-page (the lighter "Pick a Destination" view doesn't have this problem).
+  // Instant scroll cannot be interrupted, and double-rAF guarantees it runs after the
+  // heavy itinerary view's first paint.
+  useEffect(() => {
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, behavior: 'auto' });
+      });
+    });
+    return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
+  }, [step]);
+
   // Cycle loading messages for long-running AI generation
-  let msgTimer: ReturnType<typeof setTimeout> | null = null;
+  const msgTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const startCyclingMessages = (msgs: string[]) => {
     let i = 0;
     setLoadingMsg(msgs[0]);
     if (msgs.length < 2) return;
-    msgTimer = setInterval(() => {
+    msgTimer.current = setInterval(() => {
       i = (i + 1) % msgs.length;
       setLoadingMsg(msgs[i]);
     }, 3500);
   };
   const stopCyclingMessages = () => {
-    if (msgTimer) clearInterval(msgTimer);
+    if (msgTimer.current) clearInterval(msgTimer.current);
     setLoadingMsg('');
   };
 
@@ -86,7 +107,8 @@ export default function PlanPage() {
       }
       if (data.knownDestination && json.results.length === 1) {
         // Skip recommendations view entirely
-        handleSelectDestination(json.results[0], data);
+        await handleSelectDestination(json.results[0], data);
+        return;
       } else {
         setRecommendations(json.results);
         setSourceFlag(json.source ?? 'local');
@@ -128,6 +150,13 @@ export default function PlanPage() {
           return;
         }
         throw new Error(json.error || 'Itinerary generation failed');
+      }
+      if (!json.itinerary || !Array.isArray(json.itinerary.days) || json.itinerary.days.length === 0) {
+        setLlmErrorMsg('The itinerary came back empty. Please try again.');
+        setLlmErrorKind('empty');
+        setLlmError(true);
+        setStep('itinerary');
+        return;
       }
       setItinerary(json.itinerary);
       setStep('itinerary');
@@ -353,6 +382,24 @@ export default function PlanPage() {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {step === 'itinerary' && !itinerary && !llmError && (
+          <div className="max-w-lg mx-auto card p-8 text-center">
+            {loading ? (
+              <>
+                <div className="w-12 h-12 rounded-full border-4 border-brand border-t-transparent animate-spin mx-auto mb-4" />
+                <p className="text-brand font-semibold">Building your itinerary…</p>
+              </>
+            ) : (
+              <>
+                <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto mb-3" />
+                <p className="text-zinc-300 mb-4">We couldn’t build this itinerary. Please try again.</p>
+                <button onClick={() => selectedDest && handleSelectDestination(selectedDest, inputs ?? undefined)}
+                        className="btn-primary">↻ Try again</button>
+              </>
+            )}
           </div>
         )}
 

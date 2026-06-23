@@ -38,20 +38,7 @@ export function Navbar() {
 
         {/* Desktop links */}
         <div className="hidden md:flex items-center gap-1">
-          {[
-            { href: '/#destinations', label: 'Destinations' },
-            { href: '/#how-it-works', label: 'How it works' },
-          ].map((l) => (
-            <Link
-              key={l.href}
-              href={l.href}
-              className={`px-3 py-2 rounded-full text-sm font-medium transition-colors
-                ${scrolled ? 'text-gray-700 hover:bg-gray-100 hover:text-brand'
-                           : 'text-white/90 hover:bg-white/10 hover:text-white'}`}
-            >
-              {l.label}
-            </Link>
-          ))}
+
           {session && (
             <Link
               href="/dashboard"
@@ -143,12 +130,7 @@ export function Navbar() {
       {menuOpen && (
         <div className="md:hidden bg-white border-t border-gray-100 shadow-lg animate-slide-up">
           <div className="px-4 py-4 flex flex-col gap-3">
-            <Link href="/#destinations" className="font-medium text-gray-700 py-2" onClick={() => setMenuOpen(false)}>
-              Destinations
-            </Link>
-            <Link href="/#how-it-works" className="font-medium text-gray-700 py-2" onClick={() => setMenuOpen(false)}>
-              How it works
-            </Link>
+
             {session && (
               <Link href="/dashboard" className="font-medium text-gray-700 py-2" onClick={() => setMenuOpen(false)}>
                 My Trips

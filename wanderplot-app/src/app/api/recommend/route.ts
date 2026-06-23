@@ -29,9 +29,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
-import { applyFiltersAndScore, defaultPartySize, TripInputs } from '@/lib/recommend';
-import { geocodeOrigin, maxDistanceMeters, validateCoordinates } from '@/lib/geo';
+import { applyFiltersAndScore, diversifyByScenery, defaultPartySize, scoreDestinations, TripInputs } from '@/lib/recommend';
+import { geocodeOrigin, maxDistanceMeters, validateCoordinates, regionFromState } from '@/lib/geo';
+import { effectiveMaxDistanceMeters, isRoadMode } from '@/lib/transport';
 import { generateCandidates, TripInputsForAI } from '@/lib/destinationAI';
+import { indianCities } from '@/data/indianCities';
 import { isDbConfigured, isRedisConfigured, isAiGenerationEnabled, env } from '@/config/env.config';
 import { destinations as staticCatalog } from '@/data/destinations';
 
@@ -54,6 +56,8 @@ function buildCacheKey(inputs: TripInputs, originCity: string): string {
     scenery:      [...inputs.scenery].sort(),
     experience:   [...inputs.experience].sort(),
     dealbreakers: [...inputs.dealbreakers].sort(),
+    vehicle:      inputs.vehicle ?? 'flexible',
+    maxDistanceKm:inputs.maxDistanceKm ?? 0,
   });
   return createHash('sha256').update(canonical).digest('hex');
 }
@@ -105,9 +109,19 @@ async function queryDbCandidates(inputs: TripInputs, originCoords: { lat: number
     hardQuery.name = { $not: /^(ladakh|spiti|valley of flowers)/i };
   }
 
+  const v = inputs.vehicle ?? 'flexible';
+  if (isRoadMode(v)) {
+    hardQuery.requiresFlight = false;
+    hardQuery.name = { ...(hardQuery.name ?? {}), $not: /andaman|nicobar|lakshadweep/i };
+  }
+  if (v === 'train') {
+    hardQuery.name = { ...(hardQuery.name ?? {}), $not: /andaman|nicobar|lakshadweep/i };
+  }
+
   if (originCoords) {
     // $geoNear path — geo + filters in one index sweep (§4.5)
-    const distanceM = maxDistanceMeters(inputs.days);
+    const tripLenDefault = maxDistanceMeters(inputs.days);
+    const distanceM = effectiveMaxDistanceMeters(v, inputs.days, inputs.maxDistanceKm, tripLenDefault);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pipeline: any[] = [
       {
@@ -165,19 +179,49 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.knownDestination) {
-      // Direct resolution for "Destination in mind" flow
-      // Normally we'd use Gemini to resolve the name to a lat/lng and state, 
-      // but to ensure speed and 100% bug-free behavior, we mock it.
-      // The itinerary generation API uses the destination string directly anyway.
-      const mockDest = {
-        destination: {
-          name: body.knownDestination,
-          state: 'India',
-        },
-        score: 100,
-        reasons: ['You specifically requested this destination.'],
+      const partySize = Number(body.partySize) || defaultPartySize(body.groupType ?? 'solo');
+      const inputs: TripInputs = {
+        origin: body.origin ?? '', budget: Number(body.budget), month: Number(body.month),
+        days: Number(body.days), groupType: body.groupType ?? 'solo', pace: body.pace ?? 'moderate',
+        scenery: [], experience: [], dealbreakers: body.dealbreakers ?? [], partySize,
+        originCoords: body.originCoords || undefined,
+        vehicle: body.vehicle, maxDistanceKm: body.maxDistanceKm ? Number(body.maxDistanceKm) : undefined,
       };
-      return NextResponse.json({ results: [mockDest], source: 'direct' });
+      const name = String(body.knownDestination).trim();
+
+      // 1) catalog match (full rich doc) → 2) indianCities (coords+state) → 3) geocode → 4) fallback
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let destDoc: any = null;
+      const cat = staticCatalog.find(d => d.name.toLowerCase() === name.toLowerCase());
+      if (cat) {
+        destDoc = adaptStaticEntry(cat);
+      } else {
+        const city = indianCities.find(c => c.name.toLowerCase() === name.toLowerCase());
+        let coords = city ? { lat: city.lat, lng: city.lng } : null;
+        const state = city?.state ?? 'India';
+        if (!coords) {
+          const geo = await geocodeOrigin(name);           // Nominatim → Gemini, cached, fail-open
+          if (geo && validateCoordinates(geo.lat, geo.lng).valid) { coords = { lat: geo.lat, lng: geo.lng }; }
+        }
+        destDoc = {
+          _id: name.toLowerCase().replace(/\s+/g, '-'),
+          name, state, country: 'India',
+          coordinates: coords ?? undefined,
+          location: coords ? { type: 'Point', coordinates: [coords.lng, coords.lat] } : undefined,
+          scenery: [], experienceTypes: [],
+          bestMonths: [1,2,3,4,5,6,7,8,9,10,11,12],         // unknown → treat as in-season (no false "off")
+          budgetRange: { min: 1000, max: 6000 },             // generic; itinerary gen does the real costing
+          description: `Your chosen destination: ${name}.`,
+          highlights: [], tags: [], images: [], dealbreakers: [],
+          confidence: 'high', source: 'ai', popularity: 0,
+          region: regionFromState(state),
+        };
+      }
+
+      // Score the single destination through the EXISTING scorer → proper {totalScore, scores, reasons, seasonStatus}
+      const [scored] = scoreDestinations([destDoc], inputs);
+      scored.reasons = ['You specifically requested this destination.', ...scored.reasons];
+      return NextResponse.json({ results: [scored], source: 'known' });
     }
 
     const partySize = Number(body.partySize) || defaultPartySize(body.groupType ?? 'couple');
@@ -192,6 +236,9 @@ export async function POST(req: NextRequest) {
       experience:  body.experience ?? [],
       dealbreakers:body.dealbreakers ?? [],
       partySize,
+      surprise:    body.surprise,
+      vehicle:     body.vehicle,
+      maxDistanceKm: body.maxDistanceKm ? Number(body.maxDistanceKm) : undefined,
     };
 
     // ── Step 1: Cache key ────────────────────────────────────────────────────
@@ -200,7 +247,10 @@ export async function POST(req: NextRequest) {
     const redisKey   = `reco:v2:${cacheKey}`;
 
     // ── Step 2: Redis cache-aside ─────────────────────────────────────────────
-    const redisCached = await getRedisCache(redisKey);
+    let redisCached = null;
+    if (!body.surprise) {
+      redisCached = await getRedisCache(redisKey);
+    }
     if (redisCached) {
       console.log(`[recommend] Redis HIT for ${redisKey.slice(0, 16)}…`);
       return NextResponse.json({ ...(redisCached as object), cacheHit: true, cacheTier: 'redis' });
@@ -233,7 +283,10 @@ export async function POST(req: NextRequest) {
         const { RecommendationCache } = await import('@/models/RecommendationCache');
         const { Destination } = await import('@/models/Destination');
         await connectDB();
-        const mongoCached = await RecommendationCache.findOne({ cacheKey });
+        let mongoCached = null;
+        if (!body.surprise) {
+          mongoCached = await RecommendationCache.findOne({ cacheKey });
+        }
         if (mongoCached && mongoCached.destinationIds.length > 0) {
           const dbDocs = await Destination.find({ _id: { $in: mongoCached.destinationIds } }).lean();
           if (dbDocs.length > 0) {
@@ -301,14 +354,22 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Step 5: Score + honest fallback ──────────────────────────────────────
-    const filtered = applyFiltersAndScore(candidates, inputs);
-    const results  = filtered.results.slice(0, TOP_N);
+    let filtered;
+    let results;
+    if (body.surprise) {
+      const surprisePicks = diversifyByScenery(candidates, inputs, TOP_N);
+      filtered = { results: surprisePicks };
+      results = surprisePicks;
+    } else {
+      filtered = applyFiltersAndScore(candidates, inputs);
+      results  = filtered.results.slice(0, TOP_N);
+    }
 
     // allOffSeason banner — shown when all results are off-season
     const allOffSeason = results.length > 0 && results.every(r => r.seasonStatus === 'off');
 
     // ── Step 6: Write caches ──────────────────────────────────────────────────
-    if (!cacheHit && results.length > 0) {
+    if (!cacheHit && results.length > 0 && !body.surprise) {
       const payload = {
         results,
         total: filtered.results.length,
